@@ -83,7 +83,7 @@ npm start               # 构建 + 起服务，打开 http://127.0.0.1:8787
 
 ## 部署到 PocketBay
 
-线上地址：<https://class-atlas.pocketbay.app> （node 运行时，数据在 `/data` 持久卷，跨更新保留）
+线上地址：<https://class.pocketbay.app> （原 `class-atlas.pocketbay.app` 已停用；node 运行时，数据在 `/data` 持久卷，跨更新保留）
 
 ### 部署时踩过的三个坑（改仓库前先看这里）
 
