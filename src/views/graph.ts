@@ -771,7 +771,7 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
         id: p.id,
         name: p.name,
         category: Math.max(0, categoryList.indexOf(categoryOf(p))),
-        symbolSize: Math.min(62, 20 + deg * 5),
+        symbolSize: Math.min(46, 15 + deg * 3.2),
         itemStyle: {
           color: categoryColors[categoryOf(p)],
           borderColor: p.role === 'teacher' ? '#f59e0b' : '#0b1220',
@@ -790,14 +790,14 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
         id: groupNodeId(group.id),
         name: group.name,
         symbol: 'rect',
-        symbolSize: [Math.max(64, group.name.length * 15 + 30), 36],
+        symbolSize: [Math.max(54, group.name.length * 12 + 22), 28],
         itemStyle: {
           color: GROUP_KIND_COLORS[group.kind] ?? '#94a3b8',
           borderColor: '#0b1220',
           borderWidth: 1,
           opacity: dim ? 0.22 : 1,
         },
-        label: { show: !dim, position: 'inside', color: '#08202f', fontWeight: 'bold', fontSize: 12 },
+        label: { show: !dim, position: 'inside', color: '#08202f', fontWeight: 'bold', fontSize: 11 },
         _group: group,
         _memberCount: members.length,
       };
@@ -819,7 +819,7 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
         type: l.type,
         weight: l.weight,
         value: l.type,
-        lineStyle: { width: 1 + l.weight * 1.2, opacity: 0.55, curveness },
+        lineStyle: { width: 0.9 + l.weight * 0.7, opacity: 0.5, curveness },
       };
     });
 
@@ -879,16 +879,22 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
             ...memberEdges.map((e) => ({
               ...e,
               value: '成员',
-              lineStyle: { width: 1.2, opacity: 0.35, type: 'dashed', curveness: 0 },
+              lineStyle: { width: 0.9, opacity: 0.25, type: 'dashed', curveness: 0 },
             })),
           ],
           force: {
-            repulsion: Math.max(220, 420 - data.people.length * 6),
-            edgeLength: [60, 160],
-            gravity: 0.08,
+            // 人越多、群组越多，斥力就要越大 —— 否则会挤成一团（旧版本这里写反了）
+            repulsion: [
+              ...personNodes.map(() => 300 + data.people.length * 26 + data.groups.length * 30),
+              ...groupNodes.map(() => 520 + data.people.length * 40 + data.groups.length * 40),
+            ],
+            edgeLength: [110, 260],
+            gravity: 0.05,
+            friction: 0.85,
           },
-          emphasis: { focus: 'adjacency', lineStyle: { width: 4, opacity: 0.9 } },
-          label: { show: true, position: 'right', color: '#dbe7f7', fontSize: 12 },
+          emphasis: { focus: 'adjacency', lineStyle: { width: 3, opacity: 0.9 } },
+          label: { show: true, position: 'right', color: '#dbe7f7', fontSize: 11 },
+          labelLayout: { hideOverlap: true },
           lineStyle: { color: 'source' },
         },
       ],
