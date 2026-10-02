@@ -2,7 +2,7 @@
 import * as echarts from 'echarts';
 import { api } from '../api';
 import { getData } from '../state';
-import { GROUP_KINDS } from '../types';
+import { GROUP_KINDS, GROUP_LINK_TYPE } from '../types';
 import type { Group, GroupKind, Person, PersonLink } from '../types';
 import { confirmDialog, h, openDialog, showForm, toast } from '../ui';
 
@@ -328,6 +328,8 @@ export function groupManager(after: () => Promise<void>): void {
     }
     for (const group of data.groups) {
       const members = data.people.filter((p) => (p.groupIds ?? []).includes(group.id));
+      const typeName = GROUP_LINK_TYPE[group.kind] ?? '同组';
+      const pairCount = (members.length * (members.length - 1)) / 2;
       const input = h('input', { class: 'input', value: group.name, maxlength: '16' }) as HTMLInputElement;
       const kind = h(
         'select',
@@ -373,6 +375,65 @@ export function groupManager(after: () => Promise<void>): void {
               '保存',
             ),
             h('button', { class: 'btn btn-sm', onclick: () => memberPicker(group.id, after, drawList) }, '编辑成员'),
+            h(
+              'button',
+              {
+                class: 'btn btn-sm',
+                title: `把成员两两连起来，自动生成「${typeName}」关系`,
+                onclick: async () => {
+                  if (pairCount < 1) {
+                    toast('这个群组还没有足够成员', 'err');
+                    return;
+                  }
+                  const ok = await confirmDialog(
+                    '生成成员关系',
+                    `把「${group.name}」的 ${members.length} 个成员两两连起来，会生成 ${pairCount} 条「${typeName}」关系。确定吗？`,
+                    false,
+                  );
+                  if (!ok) return;
+                  errorEl.textContent = '';
+                  try {
+                    const res = await api.generateGroupLinks(group.id, 'add');
+                    toast(
+                      res.created
+                        ? `已生成 ${res.created} 条「${res.type}」关系${
+                            res.created < res.pairs ? `（另有 ${res.pairs - res.created} 条已存在）` : ''
+                          }`
+                        : `「${res.type}」关系都已经有了`,
+                      'ok',
+                    );
+                    await after();
+                    drawList();
+                  } catch (err) {
+                    errorEl.textContent = (err as Error).message;
+                  }
+                },
+              },
+              `生成关系${pairCount ? `（${pairCount}）` : ''}`,
+            ),
+            h(
+              'button',
+              {
+                class: 'btn btn-sm btn-danger',
+                onclick: async () => {
+                  const ok = await confirmDialog(
+                    '清除成员关系',
+                    `删除「${group.name}」成员之间的全部「${typeName}」关系？`,
+                  );
+                  if (!ok) return;
+                  errorEl.textContent = '';
+                  try {
+                    const res = await api.generateGroupLinks(group.id, 'remove');
+                    toast(res.removed ? `已删除 ${res.removed} 条关系` : '没有需要删除的关系', 'ok');
+                    await after();
+                    drawList();
+                  } catch (err) {
+                    errorEl.textContent = (err as Error).message;
+                  }
+                },
+              },
+              '清除关系',
+            ),
             h(
               'button',
               {

@@ -195,6 +195,74 @@ app.get('/api/bootstrap', auth, (req, res) => res.json(buildBootstrap(req.user))
 const GROUP_KINDS = ['小组', '宿舍', '社团', '其他'];
 const MAX_GROUP_NAME = 16;
 
+/** 群组类型 → 自动生成的人—人关系类型 */
+const GROUP_LINK_TYPE = {
+  小组: '同组',
+  宿舍: '同宿舍',
+  社团: '同社团',
+  其他: '同组',
+};
+
+const pairKey = (a, b) => [a, b].sort().join('|');
+
+/**
+ * 把群组成员两两之间的关系补齐（只针对这个群组对应的那一种关系类型）。
+ *
+ * 注意：默认情况下只有当这个群组**已经用「人—人连线」表达过**同组关系时才会自动动手，
+ * 否则什么都不做 —— 免得把本来用群组节点表达的图一下子连成一张密密麻麻的网。
+ * 用户手动点「生成成员关系」时传 force = true。
+ */
+function syncGroupMemberLinks(groupId, force = false) {
+  const group = getGroups().find((g) => g.id === groupId);
+  if (!group) return { created: 0, removed: 0, skipped: true };
+
+  const typeName = GROUP_LINK_TYPE[group.kind] ?? '同组';
+  const members = getPeople().filter((p) => (p.groupIds ?? []).includes(group.id));
+  const memberIds = new Set(members.map((m) => m.id));
+  const links = getLinks();
+
+  const alreadyUsed = links.some(
+    (l) => l.type === typeName && memberIds.has(l.source) && memberIds.has(l.target),
+  );
+  if (!force && !alreadyUsed) return { created: 0, removed: 0, skipped: true };
+
+  const existing = new Set(
+    links.filter((l) => l.type === typeName).map((l) => pairKey(l.source, l.target)),
+  );
+
+  let created = 0;
+  for (let i = 0; i < members.length; i += 1) {
+    for (let j = i + 1; j < members.length; j += 1) {
+      const key = pairKey(members[i].id, members[j].id);
+      if (existing.has(key)) continue;
+      links.push({
+        id: randomUUID(),
+        source: members[i].id,
+        target: members[j].id,
+        type: typeName,
+        weight: 3,
+      });
+      existing.add(key);
+      created += 1;
+    }
+  }
+
+  // 已经退出群组的人，与组内成员之间的残留关系一起清掉
+  let removed = 0;
+  const kept = links.filter((l) => {
+    if (l.type !== typeName) return true;
+    const inA = memberIds.has(l.source);
+    const inB = memberIds.has(l.target);
+    if (inA === inB) return true; // 都在组内（保留）或都不在（别动别人加的）
+    removed += 1;
+    return false;
+  });
+
+  if (created || removed) saveLinks(kept);
+
+  return { created, removed, skipped: false };
+}
+
 app.post('/api/groups', auth, editorOnly, (req, res) => {
   const name = str(req.body?.name);
   if (!name) {
@@ -291,8 +359,54 @@ app.post('/api/groups/:id/members', auth, editorOnly, (req, res) => {
       changed += 1;
     }
   }
-  if (changed) savePeople(people);
+  if (changed) {
+    savePeople(people);
+    syncGroupMemberLinks(group.id);
+  }
   res.json({ ok: true, changed });
+});
+
+/**
+ * 一键：按群组成员自动生成（或清除）人—人之间的同组类关系。
+ * 例如「302 宿舍」8 个人 → 28 条「同宿舍」。
+ */
+app.post('/api/groups/:id/generate-links', auth, editorOnly, (req, res) => {
+  const group = getGroups().find((g) => g.id === req.params.id);
+  if (!group) {
+    res.status(404).json({ error: '找不到这个群组' });
+    return;
+  }
+  const typeName = GROUP_LINK_TYPE[group.kind] ?? '同组';
+  const members = getPeople().filter((p) => (p.groupIds ?? []).includes(group.id));
+  const memberIds = new Set(members.map((m) => m.id));
+
+  if (req.body?.mode === 'remove') {
+    const links = getLinks();
+    let removed = 0;
+    for (let i = links.length - 1; i >= 0; i -= 1) {
+      const l = links[i];
+      if (l.type === typeName && memberIds.has(l.source) && memberIds.has(l.target)) {
+        links.splice(i, 1);
+        removed += 1;
+      }
+    }
+    if (removed) saveLinks(links);
+    res.json({ ok: true, type: typeName, pairs: 0, created: 0, removed });
+    return;
+  }
+
+  // 把类型补进关系类型列表，免得图上图例找不到它
+  const types = getLinkTypes();
+  if (!types.includes(typeName)) saveLinkTypes([...types, typeName]);
+
+  const result = syncGroupMemberLinks(group.id, true);
+  res.json({
+    ok: true,
+    type: typeName,
+    pairs: (members.length * (members.length - 1)) / 2,
+    created: result.created,
+    removed: result.removed,
+  });
 });
 
 /* ------------------------------------------------------------------ *
@@ -327,12 +441,19 @@ app.patch('/api/people/:id', auth, editorOnly, (req, res) => {
     return;
   }
   const body = req.body ?? {};
+  const beforeGroups = [...(person.groupIds ?? [])];
   if ('name' in body && str(body.name)) person.name = str(body.name);
   if ('role' in body) person.role = body.role === 'teacher' ? 'teacher' : 'student';
   if ('groupIds' in body) person.groupIds = cleanGroupIds(body.groupIds);
   if ('tags' in body) person.tags = asArray(body.tags).map(str).filter(Boolean);
   if ('note' in body) person.note = str(body.note);
   savePeople(people);
+
+  // 归属发生过变化的群组，把人—人关系同步一下
+  for (const gid of new Set([...beforeGroups, ...(person.groupIds ?? [])])) {
+    syncGroupMemberLinks(gid);
+  }
+
   res.json({ person });
 });
 

@@ -74,6 +74,11 @@ export const api = {
       method: 'POST',
       body: { personIds, mode },
     }),
+  generateGroupLinks: (id: string, mode: 'add' | 'remove' = 'add') =>
+    request<{ ok: boolean; type: string; pairs: number; created: number; removed: number }>(
+      `/groups/${id}/generate-links`,
+      { method: 'POST', body: { mode } },
+    ),
 
   /* 关系 */
   createLink: (body: Partial<PersonLink>) => request<{ link: PersonLink }>('/links', { method: 'POST', body }),

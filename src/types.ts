@@ -18,6 +18,14 @@ export type GroupKind = '小组' | '宿舍' | '社团' | '其他';
 
 export const GROUP_KINDS: GroupKind[] = ['小组', '宿舍', '社团', '其他'];
 
+/** 群组类型 → 自动生成的人—人关系类型 */
+export const GROUP_LINK_TYPE: Record<GroupKind, string> = {
+  小组: '同组',
+  宿舍: '同宿舍',
+  社团: '同社团',
+  其他: '同组',
+};
+
 /** 群组：关系图上的长方形节点，用来表达「同组 / 同宿舍」这类归属 */
 export interface Group {
   id: string;
