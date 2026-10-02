@@ -29,6 +29,7 @@ import {
   canEdit,
   createSession,
   destroySession,
+  destroyUserSessions,
   ensureSeed,
   getEvents,
   getGroups,
@@ -989,18 +990,24 @@ app.delete('/api/users/:id', auth, adminOnly, (req, res) => {
     res.status(404).json({ error: '找不到这个账号' });
     return;
   }
-  if (users[index].id === req.user.id) {
-    res.status(400).json({ error: '不能删掉自己' });
+  const target = users[index];
+  if (target.id === req.user.id) {
+    res.status(400).json({ error: '想注销自己的账号，请用右上角的「注销账号」按钮' });
+    return;
+  }
+  if (isAdmin(target) && otherAdmins(target.id) === 0) {
+    res.status(400).json({ error: '这是唯一的管理员，注销后没人能管平台了' });
     return;
   }
   const [removed] = users.splice(index, 1);
   saveUsers(users);
+  const killed = destroyUserSessions(removed.id);
   logAction(req, {
-    action: '删除账号',
+    action: '注销账号',
     target: removed.username,
-    detail: `原权限：${ROLE_LABELS[removed.role] ?? removed.role}`,
+    detail: `由管理员注销（原权限：${ROLE_LABELS[removed.role] ?? removed.role}，已退出 ${killed} 个登录会话）`,
   });
-  res.json({ ok: true });
+  res.json({ ok: true, removedSessions: killed });
 });
 
 /* ------------------------------------------------------------------ *
@@ -1036,6 +1043,50 @@ app.get('/api/logs', auth, (req, res) => {
     stored: all.length,
     actions: [...new Set(all.map((entry) => entry.action))].sort(),
   });
+});
+
+/* ------------------------------------------------------------------ *
+ * 注销账号
+ *
+ * 两条路：
+ *   1. 自己注销自己 —— POST /api/auth/deactivate，要验原密码 + 输入确认词
+ *   2. 管理员注销别人 —— DELETE /api/users/:id
+ * 两条路都不许把最后一个管理员注销掉，否则就没人能管平台了。
+ * ------------------------------------------------------------------ */
+
+/** 管理员之外还剩几个？（用于判断能否注销某个管理员） */
+const otherAdmins = (targetId) => getUsers().filter((u) => u.role === 'admin' && u.id !== targetId).length;
+
+app.post('/api/auth/deactivate', auth, (req, res) => {
+  const password = String(req.body?.password ?? '');
+  const confirm = str(req.body?.confirm);
+  if (confirm !== '注销') {
+    res.status(400).json({ error: '请在确认框里输入「注销」两个字' });
+    return;
+  }
+  if (!verifyPassword(password, req.user.password)) {
+    res.status(400).json({ error: '密码不对' });
+    return;
+  }
+  if (isAdmin(req.user) && otherAdmins(req.user.id) === 0) {
+    res.status(400).json({ error: '你是唯一的管理员，注销了自己就没人能管平台了。请先新建一个管理员。' });
+    return;
+  }
+  const users = getUsers();
+  const index = users.findIndex((u) => u.id === req.user.id);
+  if (index < 0) {
+    res.status(404).json({ error: '找不到这个账号' });
+    return;
+  }
+  const [removed] = users.splice(index, 1);
+  saveUsers(users);
+  const killed = destroyUserSessions(removed.id);
+  logAction(req, {
+    action: '注销账号',
+    target: removed.username,
+    detail: `本人主动注销（原权限：${ROLE_LABELS[removed.role] ?? removed.role}，已退出 ${killed} 个登录会话）`,
+  });
+  res.json({ ok: true });
 });
 
 /* ------------------------------------------------------------------ *

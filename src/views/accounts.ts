@@ -114,24 +114,29 @@ export function renderAccounts(root: HTMLElement, refresh: () => Promise<void>):
               'div',
               { style: 'display:flex;gap:6px' },
               h('button', { class: 'btn btn-sm', onclick: () => userForm(user, refresh) }, '编辑'),
-              h(
-                'button',
-                {
-                  class: 'btn btn-sm btn-danger',
-                  onclick: async () => {
-                    const ok = await confirmDialog('删除账号', `确定删除「${user.username}」？`);
-                    if (!ok) return;
-                    try {
-                      await api.deleteUser(user.id);
-                      toast('已删除', 'ok');
-                    } catch (err) {
-                      toast((err as Error).message, 'err');
-                    }
-                    await refresh();
-                  },
-                },
-                '删除',
-              ),
+              user.id === data.me.id
+                ? h('span', { class: 'muted', style: 'font-size:12px;align-self:center', title: '想注销自己，请用右上角的「注销账号」按钮' }, '本人')
+                : h(
+                    'button',
+                    {
+                      class: 'btn btn-sm btn-danger',
+                      onclick: async () => {
+                        const ok = await confirmDialog(
+                          '注销账号',
+                          `确定注销「${user.username}」（${user.displayName}）？对方所有设备会被踢下线，之后无法再用这个账号登录。`,
+                        );
+                        if (!ok) return;
+                        try {
+                          await api.deleteUser(user.id);
+                          toast('账号已注销', 'ok');
+                        } catch (err) {
+                          toast((err as Error).message, 'err');
+                        }
+                        await refresh();
+                      },
+                    },
+                    '注销',
+                  ),
             ),
           ),
         ),
@@ -174,6 +179,11 @@ export function renderAccounts(root: HTMLElement, refresh: () => Promise<void>):
         h('div', { class: 'who', text: r.desc }),
       ),
     ),
+    h('div', {
+      class: 'muted',
+      style: 'margin-top:10px;font-size:12px;line-height:1.7',
+      text: '注销规则：管理员可在上表注销别人的账号；任何人都能通过右上角「注销账号」注销自己（需输入密码与「注销」确认）。最后一个管理员不能注销，避免没人能管平台。',
+    }),
   );
 
   const toolbar = h(

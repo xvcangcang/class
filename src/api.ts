@@ -57,6 +57,10 @@ export const api = {
   changePassword: (oldPassword: string, newPassword: string) =>
     request<{ ok: boolean }>('/auth/password', { method: 'POST', body: { oldPassword, newPassword } }),
 
+  /* 自主注销账号（任何登录用户都可以注销自己） */
+  deactivateAccount: (password: string, confirm: string) =>
+    request<{ ok: boolean }>('/auth/deactivate', { method: 'POST', body: { password, confirm } }),
+
   /* 人物 */
   createPerson: (body: Partial<Person>) => request<{ person: Person }>('/people', { method: 'POST', body }),
   updatePerson: (id: string, body: Partial<Person>) =>

@@ -117,6 +117,7 @@ function renderShell() {
           )
         : null,
       h('button', { class: 'btn btn-sm', onclick: () => openChangePassword() }, '改密码'),
+      h('button', { class: 'btn btn-sm btn-danger', onclick: () => openDeactivate() }, '注销账号'),
       h(
         'button',
         {
@@ -207,6 +208,39 @@ async function toggleIncognito(current: boolean) {
       await api.setIncognito(true, values.reason ?? '');
       toast('无痕模式已开启，操作将不再记录', 'ok');
       await boot();
+    },
+  });
+}
+
+/** 注销自己的账号：需要原密码 + 手动输入「注销」两个字 */
+function openDeactivate() {
+  const data = getData();
+  showForm({
+    title: '注销我的账号',
+    submitText: '确认注销',
+    fields: [
+      {
+        name: 'warn',
+        label: '⚠️ 注销后会发生什么',
+        type: 'textarea',
+        value: `账号「${data.me.username}」会被删除，所有设备上的登录都会被踢下线，之后无法再用它登录。\n（你录入的人物、关系、事件不会被删除）`,
+        help: '如果是误操作，请点「取消」。注销会被记入操作日志。',
+      },
+      { name: 'password', label: '你的登录密码', type: 'password', required: true, placeholder: '确认是你本人' },
+      {
+        name: 'confirm',
+        label: '输入「注销」两个字确认',
+        required: true,
+        placeholder: '注销',
+        help: data.isAdmin ? '注意：如果你是唯一的管理员，需要先新建另一个管理员才能注销。' : '',
+      },
+    ],
+    onSubmit: async (values) => {
+      await api.deactivateAccount(String(values.password ?? ''), String(values.confirm ?? '').trim());
+      setToken(null);
+      clearData();
+      toast('账号已注销', 'ok');
+      showLogin();
     },
   });
 }

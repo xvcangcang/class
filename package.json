@@ -1,7 +1,7 @@
 {
   "name": "class-atlas",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "description": "班级图谱 —— 班级人物关系与事件分析平台",
   "scripts": {

@@ -156,6 +156,20 @@ export function destroySession(token) {
   }
 }
 
+/** 注销账号时用：把这个用户所有设备的登录会话全部清掉 */
+export function destroyUserSessions(userId) {
+  const sessions = readJson('sessions', {});
+  let removed = 0;
+  for (const [token, session] of Object.entries(sessions)) {
+    if (session?.userId === userId) {
+      delete sessions[token];
+      removed += 1;
+    }
+  }
+  if (removed) writeJson('sessions', sessions);
+  return removed;
+}
+
 /* ------------------------------------------------------------------ *
  * 集合读写
  * ------------------------------------------------------------------ */

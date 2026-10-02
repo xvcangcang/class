@@ -10,7 +10,7 @@ import { h, toast } from '../ui';
 
 /** 动作 → 颜色：新增类偏绿、删除类偏红、修改类偏黄，其余用蓝色 */
 function actionTone(action: string): string {
-  if (action.includes('删除') || action.includes('清除')) return 'danger';
+  if (action.includes('删除') || action.includes('清除') || action.includes('注销')) return 'danger';
   if (action.includes('新增') || action.includes('新建') || action.includes('生成') || action.includes('加入')) return 'ok';
   if (
     action.includes('修改') ||
