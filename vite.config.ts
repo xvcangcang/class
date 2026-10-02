@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { copyFileSync, readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 
@@ -30,12 +30,29 @@ function versionMetaPlugin(): Plugin {
 }
 
 /**
+ * 构建结束后把 app.html 复制一份为 index.html。
+ * 用插件而不是 `vite build && cp ...`：平台解析启动命令时会认错链式命令里的 cp。
+ */
+function copyAppHtmlPlugin(): Plugin {
+  return {
+    name: 'copy-app-html-to-index',
+    apply: 'build',
+    closeBundle() {
+      copyFileSync(
+        fileURLToPath(new URL('./dist/app.html', import.meta.url)),
+        fileURLToPath(new URL('./dist/index.html', import.meta.url)),
+      );
+    },
+  };
+}
+
+/**
  * base 用相对路径，构建产物可丢进任意子目录托管。
  * 开发期把 /api 代理到本地 Node 服务（127.0.0.1:8787），前后端同源。
  */
 export default defineConfig({
   base: './',
-  plugins: [versionMetaPlugin()],
+  plugins: [versionMetaPlugin(), copyAppHtmlPlugin()],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),

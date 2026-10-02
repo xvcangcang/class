@@ -7,11 +7,11 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit",
-    "build": "vite build && cp dist/app.html dist/index.html",
+    "build": "vite build",
     "build:check": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "server": "node server/index.mjs",
-    "start": "npm run build && node server/index.mjs"
+    "start": "node server/index.mjs"
   },
   "dependencies": {
     "echarts": "^5.5.1",
