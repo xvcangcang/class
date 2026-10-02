@@ -3,7 +3,7 @@ import * as echarts from 'echarts';
 import { api } from '../api';
 import { getData } from '../state';
 import { GROUP_KINDS } from '../types';
-import type { Group, GroupKind, Person } from '../types';
+import type { Group, GroupKind, Person, PersonLink } from '../types';
 import { confirmDialog, h, openDialog, showForm, toast } from '../ui';
 
 /** 视图状态放在模块级，刷新后不会丢 */
@@ -97,12 +97,13 @@ export function linkForm(after: () => Promise<void>, preset?: Person): void {
         help: '两端必须是两个不同的人',
       },
       {
-        name: 'type',
+        name: 'types',
         label: '关系类型',
-        type: 'select',
+        type: 'multiselect',
         options: data.linkTypes.map((t) => ({ value: t, label: t })),
-        value: '好友',
-        help: '同一对人可以加多条不同类型的关系（比如既是好友、又是同桌）',
+        value: ['好友'],
+        required: true,
+        help: '可以一次勾多个：比如既是好友、又是同桌、还是小学同学',
       },
       {
         name: 'weight',
@@ -114,13 +115,61 @@ export function linkForm(after: () => Promise<void>, preset?: Person): void {
     ],
     onSubmit: async (values) => {
       if (values.source === values.target) return '两端不能是同一个人';
-      await api.createLink({
-        source: values.source,
-        target: values.target,
-        type: values.type,
-        weight: Number(values.weight) || 1,
-      });
-      toast('已添加关系', 'ok');
+      const types: string[] = values.types ?? [];
+      if (!types.length) return '至少勾一个关系类型';
+
+      // 这两个人之间已有的关系（不分方向）
+      const existing = getData().links.filter(
+        (l) =>
+          (l.source === values.source && l.target === values.target) ||
+          (l.source === values.target && l.target === values.source),
+      );
+
+      let created = 0;
+      let skipped = 0;
+      for (const type of types) {
+        if (existing.some((l) => l.type === type)) {
+          skipped += 1;
+          continue;
+        }
+        await api.createLink({
+          source: values.source,
+          target: values.target,
+          type,
+          weight: Number(values.weight) || 1,
+        });
+        created += 1;
+      }
+
+      if (!created) return '勾选的关系都已经存在了';
+      toast(skipped ? `已添加 ${created} 条，跳过 ${skipped} 条（已存在）` : `已添加 ${created} 条关系`, 'ok');
+      await after();
+    },
+  });
+}
+
+/** 编辑已有一条关系的类型 / 亲密度 */
+export function linkEditForm(link: PersonLink, after: () => Promise<void>): void {
+  const data = getData();
+  const byId = new Map(data.people.map((p) => [p.id, p]));
+  const from = byId.get(link.source)?.name ?? '?';
+  const to = byId.get(link.target)?.name ?? '?';
+  showForm({
+    title: `编辑「${from} — ${to}」`,
+    fields: [
+      {
+        name: 'type',
+        label: '关系类型',
+        type: 'select',
+        options: data.linkTypes.map((t) => ({ value: t, label: t })),
+        value: link.type,
+        required: true,
+      },
+      { name: 'weight', label: '亲密度（1~5）', type: 'number', value: link.weight },
+    ],
+    onSubmit: async (values) => {
+      await api.updateLink(link.id, { type: values.type, weight: Number(values.weight) || link.weight });
+      toast('已保存', 'ok');
       await after();
     },
   });
@@ -976,6 +1025,7 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
                   ? h(
                       'div',
                       { class: 'tl-actions' },
+                      h('button', { class: 'btn btn-sm', onclick: () => linkEditForm(l, refresh) }, '编辑'),
                       h(
                         'button',
                         {
