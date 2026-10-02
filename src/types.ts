@@ -7,8 +7,22 @@ export interface Person {
   id: string;
   name: string;
   role: PersonRole;
-  group: string;
+  /** 所属群组的 id 列表：一个人可以同时属于小组和宿舍 */
+  groupIds: string[];
   tags: string[];
+  note: string;
+  createdAt: number;
+}
+
+export type GroupKind = '小组' | '宿舍' | '社团' | '其他';
+
+export const GROUP_KINDS: GroupKind[] = ['小组', '宿舍', '社团', '其他'];
+
+/** 群组：关系图上的长方形节点，用来表达「同组 / 同宿舍」这类归属 */
+export interface Group {
+  id: string;
+  name: string;
+  kind: GroupKind;
   note: string;
   createdAt: number;
 }
@@ -50,6 +64,7 @@ export interface Bootstrap {
   me: User;
   roles: RoleInfo[];
   people: Person[];
+  groups: Group[];
   links: PersonLink[];
   events: ClassEvent[];
   users: User[];

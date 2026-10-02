@@ -1,5 +1,5 @@
 /** 与后端 /api/* 的通信封装 */
-import type { Bootstrap, ClassEvent, Person, PersonLink, User } from './types';
+import type { Bootstrap, ClassEvent, Group, Person, PersonLink, User } from './types';
 
 const TOKEN_KEY = 'class-atlas-token';
 
@@ -62,6 +62,18 @@ export const api = {
   updatePerson: (id: string, body: Partial<Person>) =>
     request<{ person: Person }>(`/people/${id}`, { method: 'PATCH', body }),
   deletePerson: (id: string) => request<{ ok: boolean }>(`/people/${id}`, { method: 'DELETE' }),
+
+  /* 群组 */
+  createGroup: (body: Partial<Group>) => request<{ group: Group }>('/groups', { method: 'POST', body }),
+  updateGroup: (id: string, body: Partial<Group>) =>
+    request<{ group: Group }>(`/groups/${id}`, { method: 'PATCH', body }),
+  deleteGroup: (id: string) =>
+    request<{ ok: boolean; removedMembers: number }>(`/groups/${id}`, { method: 'DELETE' }),
+  setGroupMembers: (id: string, personIds: string[], mode: 'add' | 'remove' = 'add') =>
+    request<{ ok: boolean; changed: number }>(`/groups/${id}/members`, {
+      method: 'POST',
+      body: { personIds, mode },
+    }),
 
   /* 关系 */
   createLink: (body: Partial<PersonLink>) => request<{ link: PersonLink }>('/links', { method: 'POST', body }),

@@ -20,6 +20,7 @@ export const DATA_DIR = process.env.POCKETBAY_DATA_DIR || join(ROOT, 'data');
 const FILES = {
   users: 'users.json',
   people: 'people.json',
+  groups: 'groups.json',
   links: 'links.json',
   events: 'events.json',
   linkTypes: 'link-types.json',
@@ -135,6 +136,8 @@ export const getUsers = () => readJson('users', []);
 export const saveUsers = (list) => writeJson('users', list);
 export const getPeople = () => readJson('people', []);
 export const savePeople = (list) => writeJson('people', list);
+export const getGroups = () => readJson('groups', []);
+export const saveGroups = (list) => writeJson('groups', list);
 export const getLinks = () => readJson('links', []);
 export const saveLinks = (list) => writeJson('links', list);
 export const getEvents = () => readJson('events', []);
@@ -178,11 +181,65 @@ export function ensureSeed() {
   }
 
   if (!existsSync(fileOf('people'))) writeJson('people', []);
+  if (!existsSync(fileOf('groups'))) writeJson('groups', []);
   if (!existsSync(fileOf('links'))) writeJson('links', []);
   if (!existsSync(fileOf('events'))) writeJson('events', []);
   if (!existsSync(fileOf('linkTypes'))) writeJson('linkTypes', DEFAULT_LINK_TYPES);
 
   clearLegacyDemoData();
+  migratePersonGroups();
+}
+
+/** 按名字猜群组类型，用于老数据迁移 */
+function guessGroupKind(name) {
+  if (name.includes('宿舍') || name.includes('寝室')) return '宿舍';
+  if (name.includes('社团')) return '社团';
+  if (name.includes('组')) return '小组';
+  return '其他';
+}
+
+/**
+ * 早期版本把「小组 / 宿舍」当成人物身上的一个文本字段（person.group）。
+ * 这里把它升级成真正的群组节点（groups + person.groupIds），只执行一次。
+ */
+function migratePersonGroups() {
+  const flag = join(DATA_DIR, '.migrated-groups-v1');
+  if (existsSync(flag)) return;
+
+  const people = getPeople();
+  const groups = getGroups();
+  let changed = false;
+
+  for (const person of people) {
+    if (!Array.isArray(person.groupIds)) person.groupIds = [];
+    const legacy = typeof person.group === 'string' ? person.group.trim() : '';
+    if (legacy && person.groupIds.length === 0) {
+      let group = groups.find((g) => g.name === legacy);
+      if (!group) {
+        group = {
+          id: randomUUID(),
+          name: legacy,
+          kind: guessGroupKind(legacy),
+          note: '',
+          createdAt: Date.now(),
+        };
+        groups.push(group);
+      }
+      person.groupIds.push(group.id);
+      changed = true;
+    }
+    if ('group' in person) {
+      delete person.group;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    savePeople(people);
+    saveGroups(groups);
+    console.log('已把人物身上的「小组 / 宿舍」升级为群组节点');
+  }
+  writeFileSync(flag, new Date().toISOString());
 }
 
 /**

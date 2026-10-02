@@ -21,7 +21,10 @@ function personCard(person: Person, relationCount: number, refresh: () => Promis
       'div',
       { class: 'tag-row' },
       h('span', { class: 'tag', text: person.role === 'teacher' ? '老师' : '学生' }),
-      person.group ? h('span', { class: 'tag', text: person.group }) : null,
+      ...(person.groupIds ?? []).map((gid) => {
+      const g = data.groups.find((x) => x.id === gid);
+      return g ? h('span', { class: 'tag', text: g.name }) : null;
+    }),
       ...person.tags.map((t) => h('span', { class: 'tag', text: t })),
     ),
     person.note ? h('div', { class: 'muted', text: person.note, style: 'white-space:pre-wrap' }) : null,
@@ -63,7 +66,10 @@ export function renderPeople(root: HTMLElement, refresh: () => Promise<void>): (
 
     const filtered = data.people.filter((p) => {
       if (!keyword) return true;
-      return `${p.name}${p.group}${p.tags.join('')}${p.note}`.includes(keyword);
+      const groupNames = (p.groupIds ?? [])
+        .map((gid) => data.groups.find((g) => g.id === gid)?.name ?? '')
+        .join('');
+      return `${p.name}${groupNames}${p.tags.join('')}${p.note}`.includes(keyword);
     });
 
     if (!filtered.length) {

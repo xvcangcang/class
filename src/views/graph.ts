@@ -2,7 +2,8 @@
 import * as echarts from 'echarts';
 import { api } from '../api';
 import { getData } from '../state';
-import type { Person } from '../types';
+import { GROUP_KINDS } from '../types';
+import type { Group, GroupKind, Person } from '../types';
 import { confirmDialog, h, openDialog, showForm, toast } from '../ui';
 
 /** 视图状态放在模块级，刷新后不会丢 */
@@ -21,6 +22,7 @@ function personOptions(people: Person[]) {
 
 /** 人物表单（新增 / 编辑共用） */
 export function personForm(person: Person | null, after: () => Promise<void>): void {
+  const data = getData();
   showForm({
     title: person ? `编辑「${person.name}」` : '添加人物',
     fields: [
@@ -35,7 +37,16 @@ export function personForm(person: Person | null, after: () => Promise<void>): v
         ],
         value: person?.role ?? 'student',
       },
-      { name: 'group', label: '小组 / 部门', value: person?.group ?? '', placeholder: '如：第一组、教师办公室' },
+      {
+        name: 'groupIds',
+        label: '所属群组',
+        type: 'multiselect',
+        options: data.groups.map((g) => ({ value: g.id, label: `${g.name}（${g.kind}）` })),
+        value: person?.groupIds ?? [],
+        help: data.groups.length
+          ? '可以同时属于多个，比如既是第三组、又住 302 宿舍'
+          : '还没有群组，先点工具栏的「🔲 群组」建一个',
+      },
       {
         name: 'tags',
         label: '标签',
@@ -48,7 +59,7 @@ export function personForm(person: Person | null, after: () => Promise<void>): v
       const payload = {
         name: values.name,
         role: values.role,
-        group: values.group,
+        groupIds: values.groupIds,
         tags: String(values.tags ?? '')
           .split(/[、,，\s]+/)
           .filter(Boolean),
@@ -91,6 +102,7 @@ export function linkForm(after: () => Promise<void>, preset?: Person): void {
         type: 'select',
         options: data.linkTypes.map((t) => ({ value: t, label: t })),
         value: '好友',
+        help: '同一对人可以加多条不同类型的关系（比如既是好友、又是同桌）',
       },
       {
         name: 'weight',
@@ -238,6 +250,214 @@ export function typeManager(after: () => Promise<void>): void {
   drawList();
 }
 
+/** 群组管理：增删改（小组 / 宿舍 / 社团） */
+export function groupManager(after: () => Promise<void>): void {
+  const listEl = h('div');
+  const errorEl = h('div', { class: 'muted', style: 'color:var(--danger);min-height:18px;margin:8px 0' });
+  const nameInput = h('input', {
+    class: 'input',
+    placeholder: '新群组名称，如：302 宿舍',
+    maxlength: '16',
+  }) as HTMLInputElement;
+  const kindSelect = h(
+    'select',
+    { class: 'select', style: 'width:auto;flex:none' },
+    ...GROUP_KINDS.map((k) => h('option', { value: k }, k)),
+  ) as HTMLSelectElement;
+
+  function drawList(): void {
+    const data = getData();
+    listEl.innerHTML = '';
+    if (!data.groups.length) {
+      listEl.append(
+        h('div', {
+          class: 'empty',
+          text: '还没有群组。建一个「第一组」或「302 宿舍」，再把同学放进去。',
+        }),
+      );
+      return;
+    }
+    for (const group of data.groups) {
+      const members = data.people.filter((p) => (p.groupIds ?? []).includes(group.id));
+      const input = h('input', { class: 'input', value: group.name, maxlength: '16' }) as HTMLInputElement;
+      const kind = h(
+        'select',
+        { class: 'select', style: 'width:auto;flex:none' },
+        ...GROUP_KINDS.map((k) => h('option', { value: k, selected: k === group.kind }, k)),
+      ) as HTMLSelectElement;
+      listEl.append(
+        h(
+          'div',
+          { class: 'rel-item' },
+          h('div', { style: 'display:flex;gap:8px;align-items:center' }, input, kind,
+            h('span', { class: 'who', style: 'flex:none;white-space:nowrap', text: `${members.length} 人` }),
+          ),
+          h('div', {
+            class: 'who',
+            style: 'margin-top:6px',
+            text: members.length ? members.map((m) => m.name).join('、') : '还没有成员',
+          }),
+          h(
+            'div',
+            { class: 'tl-actions' },
+            h(
+              'button',
+              {
+                class: 'btn btn-sm',
+                onclick: async () => {
+                  const name = input.value.trim();
+                  if (!name) {
+                    errorEl.textContent = '名称不能空着';
+                    return;
+                  }
+                  errorEl.textContent = '';
+                  try {
+                    await api.updateGroup(group.id, { name, kind: kind.value as GroupKind });
+                    toast('已保存', 'ok');
+                    await after();
+                    drawList();
+                  } catch (err) {
+                    errorEl.textContent = (err as Error).message;
+                  }
+                },
+              },
+              '保存',
+            ),
+            h('button', { class: 'btn btn-sm', onclick: () => memberPicker(group.id, after, drawList) }, '编辑成员'),
+            h(
+              'button',
+              {
+                class: 'btn btn-sm btn-danger',
+                onclick: async () => {
+                  const ok = await confirmDialog(
+                    '删除群组',
+                    `确定删除「${group.name}」？${members.length ? `${members.length} 人会退出这个群组。` : ''}`,
+                  );
+                  if (!ok) return;
+                  try {
+                    await api.deleteGroup(group.id);
+                    toast('已删除', 'ok');
+                    await after();
+                    drawList();
+                  } catch (err) {
+                    errorEl.textContent = (err as Error).message;
+                  }
+                },
+              },
+              '删除',
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  const addBtn = h(
+    'button',
+    {
+      class: 'btn btn-primary',
+      onclick: async () => {
+        const name = nameInput.value.trim();
+        if (!name) {
+          errorEl.textContent = '先写个名称';
+          return;
+        }
+        errorEl.textContent = '';
+        try {
+          await api.createGroup({ name, kind: kindSelect.value as GroupKind });
+          nameInput.value = '';
+          toast('已创建', 'ok');
+          await after();
+          drawList();
+        } catch (err) {
+          errorEl.textContent = (err as Error).message;
+        }
+      },
+    },
+    '创建',
+  );
+
+  openDialog((close) =>
+    h(
+      'div',
+      { class: 'modal' },
+      h('h2', { text: '群组' }),
+      h('div', {
+        class: 'muted',
+        style: 'margin-bottom:10px;line-height:1.6',
+        text: '群组会显示成图上的长方形节点，人连到群组就表示「同组 / 同宿舍」。一个人可以同时在好几个群里。',
+      }),
+      listEl,
+      errorEl,
+      h('div', { style: 'display:flex;gap:8px' }, nameInput, kindSelect, addBtn),
+      h('div', { class: 'modal-actions' }, h('button', { class: 'btn', onclick: () => close() }, '完成')),
+    ),
+  );
+
+  drawList();
+}
+
+/** 勾选谁在这个群里 */
+function memberPicker(groupId: string, after: () => Promise<void>, onDone: () => void): void {
+  const data = getData();
+  const group = data.groups.find((g) => g.id === groupId);
+  if (!group) return;
+
+  const boxes = new Map<string, HTMLInputElement>();
+  const grid = h('div', { class: 'checkbox-grid' });
+  const sorted = [...data.people].sort((a, b) => a.name.localeCompare(b.name));
+  for (const person of sorted) {
+    const box = h('input', { type: 'checkbox' }) as HTMLInputElement;
+    box.checked = (person.groupIds ?? []).includes(groupId);
+    boxes.set(person.id, box);
+    grid.append(h('label', null, box, `${person.role === 'teacher' ? '师·' : ''}${person.name}`));
+  }
+  if (!sorted.length) grid.append(h('span', { class: 'muted', text: '还没有人物' }));
+
+  const errorEl = h('div', { class: 'muted', style: 'color:var(--danger);min-height:18px' });
+
+  const save = h(
+    'button',
+    {
+      class: 'btn btn-primary',
+      onclick: async () => {
+        try {
+          const join: string[] = [];
+          const leave: string[] = [];
+          for (const [personId, box] of boxes) (box.checked ? join : leave).push(personId);
+          let changed = 0;
+          if (join.length) changed += (await api.setGroupMembers(groupId, join, 'add')).changed;
+          if (leave.length) changed += (await api.setGroupMembers(groupId, leave, 'remove')).changed;
+          toast(changed ? `已更新 ${changed} 人` : '没有变化', 'ok');
+          await after();
+          onDone();
+          close();
+        } catch (err) {
+          errorEl.textContent = (err as Error).message;
+        }
+      },
+    },
+    '保存',
+  );
+
+  const close = openDialog((cl) =>
+    h(
+      'div',
+      { class: 'modal' },
+      h('h2', { text: `「${group.name}」的成员` }),
+      h('div', { class: 'muted', style: 'margin-bottom:10px', text: '勾上 = 加入，取消勾选 = 移出。' }),
+      grid,
+      errorEl,
+      h(
+        'div',
+        { class: 'modal-actions' },
+        h('button', { class: 'btn', onclick: () => cl() }, '取消'),
+        save,
+      ),
+    ),
+  );
+}
+
 export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): () => void {
   const data = getData();
   const byId = new Map(data.people.map((p) => [p.id, p]));
@@ -249,11 +469,21 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
     degree.set(link.target, (degree.get(link.target) ?? 0) + 1);
   }
 
+  /* ---------- 群组节点 ---------- */
+  const groupById = new Map(data.groups.map((g) => [g.id, g]));
+  const GROUP_PREFIX = 'group:';
+  const groupNodeId = (id: string) => `${GROUP_PREFIX}${id}`;
+  const isGroupNode = (id: string) => id.startsWith(GROUP_PREFIX);
+
   /* ---------- 分类（配色依据） ---------- */
-  const groups = Array.from(new Set(data.people.map((p) => p.group || '未分组')));
-  const categoryList = viewState.colorBy === 'role' ? ['学生', '老师'] : groups;
-  const categoryOf = (p: Person): string =>
-    viewState.colorBy === 'role' ? (p.role === 'teacher' ? '老师' : '学生') : p.group || '未分组';
+  const categoryOf = (p: Person): string => {
+    if (viewState.colorBy === 'role') return p.role === 'teacher' ? '老师' : '学生';
+    const first = (p.groupIds ?? [])[0];
+    const group = first ? groupById.get(first) : null;
+    return group ? group.name : '未分组';
+  };
+  const categoryList =
+    viewState.colorBy === 'role' ? ['学生', '老师'] : Array.from(new Set(data.people.map(categoryOf)));
 
   /* ---------- DOM ---------- */
   const chartEl = h('div', { id: 'chart' });
@@ -289,14 +519,16 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
       class: 'btn btn-sm',
       onclick: () => {
         viewState.colorBy = viewState.colorBy === 'role' ? 'group' : 'role';
-        colorToggle.textContent = viewState.colorBy === 'role' ? '按角色着色' : '按小组着色';
+        colorToggle.textContent = viewState.colorBy === 'role' ? '按角色着色' : '按群组着色';
         render();
       },
     },
-    viewState.colorBy === 'role' ? '按角色着色' : '按小组着色',
+    viewState.colorBy === 'role' ? '按角色着色' : '按群组着色',
   );
 
-  const allTypes = Array.from(new Set([...data.linkTypes, ...data.links.map((l) => l.type)]));
+  const allTypes = Array.from(
+    new Set([...data.linkTypes, ...data.links.map((l) => l.type), '成员']),
+  );
   const chips = allTypes.map((type) =>
     h(
       'button',
@@ -338,6 +570,7 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
       ? h('button', { class: 'btn btn-sm btn-primary', onclick: () => personForm(null, refresh) }, '＋ 人物')
       : null,
     data.canEdit ? h('button', { class: 'btn btn-sm', onclick: () => linkForm(refresh) }, '＋ 关系') : null,
+    data.canEdit ? h('button', { class: 'btn btn-sm', onclick: () => groupManager(refresh) }, '🔲 群组') : null,
     data.canEdit
       ? h('button', { class: 'btn btn-sm', onclick: () => typeManager(refresh) }, '⚙ 关系类型')
       : null,
@@ -393,6 +626,7 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
     const prevOption = chart.getOption() as any;
     const prevZoom = typeof prevOption?.series?.[0]?.zoom === 'number' ? prevOption.series[0].zoom : 1;
 
+    const showMembers = !viewState.hiddenTypes.has('成员');
     const links = data.links.filter(
       (l) => !viewState.hiddenTypes.has(l.type) && byId.has(l.source) && byId.has(l.target),
     );
@@ -401,13 +635,23 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
       linkedIds.add(link.source);
       linkedIds.add(link.target);
     }
+    // 人 → 群组 的归属边（虚线）
+    const memberEdges: { id: string; source: string; target: string }[] = [];
+    if (showMembers) {
+      for (const person of data.people) {
+        for (const gid of person.groupIds ?? []) {
+          if (!groupById.has(gid)) continue;
+          memberEdges.push({ id: `m:${person.id}:${gid}`, source: person.id, target: groupNodeId(gid) });
+        }
+      }
+    }
     const keyword = viewState.keyword;
     const matched = keyword ? data.people.filter((p) => p.name.includes(keyword)).map((p) => p.id) : [];
 
     const categoryColors: Record<string, string> = {};
     for (const name of categoryList) categoryColors[name] = colorOfStatic(name);
 
-    const nodes = data.people.map((p) => {
+    const personNodes = data.people.map((p) => {
       const deg = degree.get(p.id) ?? 0;
       let opacity = 1;
       if (keyword) opacity = matched.includes(p.id) ? 1 : 0.15;
@@ -428,22 +672,76 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
       };
     });
 
+    /* 群组长方形节点 */
+    const groupNodes = data.groups.map((group) => {
+      const members = data.people.filter((p) => (p.groupIds ?? []).includes(group.id));
+      const dim = keyword ? !group.name.includes(keyword) : !showMembers;
+      return {
+        id: groupNodeId(group.id),
+        name: group.name,
+        symbol: 'rect',
+        symbolSize: [Math.max(64, group.name.length * 15 + 30), 36],
+        itemStyle: {
+          color: GROUP_KIND_COLORS[group.kind] ?? '#94a3b8',
+          borderColor: '#0b1220',
+          borderWidth: 1,
+          opacity: dim ? 0.22 : 1,
+        },
+        label: { show: !dim, position: 'inside', color: '#08202f', fontWeight: 'bold', fontSize: 12 },
+        _group: group,
+        _memberCount: members.length,
+      };
+    });
+
+    const nodes = [...personNodes, ...groupNodes];
+
+    /* 人—人关系：同一对人有多条时，用不同弧度错开 */
+    const pairSeq = new Map<string, number>();
+    const personEdges = links.map((l) => {
+      const key = [l.source, l.target].sort().join('|');
+      const index = pairSeq.get(key) ?? 0;
+      pairSeq.set(key, index + 1);
+      const curveness = [0.08, 0.3, -0.24, 0.44, -0.4][Math.min(index, 4)];
+      return {
+        source: l.source,
+        target: l.target,
+        id: l.id,
+        type: l.type,
+        weight: l.weight,
+        value: l.type,
+        lineStyle: { width: 1 + l.weight * 1.2, opacity: 0.55, curveness },
+      };
+    });
+
     const option = {
       backgroundColor: 'transparent',
       tooltip: {
         confine: true,
         formatter: (params: any) => {
           if (params.dataType === 'edge') {
-            const l = params.data;
-            const s = byId.get(l.source)?.name ?? '?';
-            const t = byId.get(l.target)?.name ?? '?';
-            return `${s} — ${t}<br/>关系：${l.type}（亲密度 ${l.weight}）`;
+            const d = params.data;
+            if (d.value === '成员') {
+              const owner = byId.get(d.source);
+              const group = groupById.get(String(d.target).slice(GROUP_PREFIX.length));
+              return `${owner?.name ?? '?'} 属于 <b>${group?.name ?? '?'}</b>`;
+            }
+            const s = byId.get(d.source)?.name ?? '?';
+            const t = byId.get(d.target)?.name ?? '?';
+            return `${s} — ${t}<br/>关系：${d.type}（亲密度 ${d.weight}）`;
           }
-          const p = byId.get(params.data.id);
+          const raw = params.data;
+          if (raw._group) {
+            return `<b>${raw._group.name}</b><br/>${raw._group.kind} · ${raw._memberCount} 人`;
+          }
+          const p = byId.get(raw.id);
           if (!p) return params.name;
           const relCount = degree.get(p.id) ?? 0;
-          return `<b>${p.name}</b><br/>${p.role === 'teacher' ? '老师' : '学生'} · ${
-            p.group || '未分组'
+          const groupNames = (p.groupIds ?? [])
+            .map((gid) => groupById.get(gid)?.name)
+            .filter(Boolean)
+            .join('、');
+          return `<b>${p.name}</b><br/>${p.role === 'teacher' ? '老师' : '学生'}${
+            groupNames ? ` · ${groupNames}` : ''
           }<br/>关系数：${relCount}`;
         },
       },
@@ -466,19 +764,14 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
           zoom: prevZoom,
           categories: categoryList.map((name) => ({ name, itemStyle: { color: categoryColors[name] } })),
           data: nodes,
-          links: links.map((l) => ({
-            source: l.source,
-            target: l.target,
-            id: l.id,
-            type: l.type,
-            weight: l.weight,
-            value: l.type,
-            lineStyle: {
-              width: 1 + l.weight * 1.2,
-              opacity: 0.55,
-              curveness: 0.1,
-            },
-          })),
+          links: [
+            ...personEdges,
+            ...memberEdges.map((e) => ({
+              ...e,
+              value: '成员',
+              lineStyle: { width: 1.2, opacity: 0.35, type: 'dashed', curveness: 0 },
+            })),
+          ],
           force: {
             repulsion: Math.max(220, 420 - data.people.length * 6),
             edgeLength: [60, 160],
@@ -494,9 +787,63 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
   }
 
   /* ---------- 侧栏 ---------- */
+  function renderGroupSide(target: Group) {
+    const members = data.people.filter((p) => (p.groupIds ?? []).includes(target.id));
+    sideEl.append(
+      h(
+        'div',
+        { class: 'card' },
+        h('h3', { text: target.name }),
+        h(
+          'div',
+          { class: 'tag-row' },
+          h('span', { class: 'tag', text: target.kind }),
+          h('span', { class: 'tag', text: `${members.length} 人` }),
+        ),
+        target.note ? h('div', { class: 'muted', text: target.note }) : null,
+        h(
+          'div',
+          { class: 'tl-actions', style: 'margin-top:12px' },
+          h('button', { class: 'btn btn-sm', onclick: () => select(null) }, '返回概览'),
+          data.canEdit
+            ? h('button', { class: 'btn btn-sm', onclick: () => groupManager(refresh) }, '管理群组')
+            : null,
+        ),
+      ),
+    );
+
+    sideEl.append(
+      h(
+        'div',
+        { class: 'card' },
+        h('h3', { text: '成员' }),
+        ...(members.length
+          ? members.map((m) =>
+              h(
+                'div',
+                { class: 'rel-item', style: 'cursor:pointer', onclick: () => select(m.id) },
+                h('b', { text: m.name }),
+                h('div', { class: 'who', text: m.role === 'teacher' ? '老师' : '学生' }),
+              ),
+            )
+          : [h('div', { class: 'empty', text: '这个群组还没有成员' })]),
+      ),
+    );
+  }
+
   function renderSide() {
     sideEl.innerHTML = '';
-    const person = viewState.selected ? byId.get(viewState.selected) : null;
+    const selectedId = viewState.selected;
+    const group =
+      selectedId && isGroupNode(selectedId)
+        ? groupById.get(selectedId.slice(GROUP_PREFIX.length)) ?? null
+        : null;
+    const person = selectedId && !isGroupNode(selectedId) ? byId.get(selectedId) ?? null : null;
+
+    if (group) {
+      renderGroupSide(group);
+      return;
+    }
 
     if (!person) {
       /* 概览 */
@@ -518,6 +865,7 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
             h('span', { class: 'tag', text: `老师 ${teachers}` }),
             h('span', { class: 'tag', text: `关系 ${data.links.length}` }),
             h('span', { class: 'tag', text: `事件 ${data.events.length}` }),
+            h('span', { class: 'tag', text: `群组 ${data.groups.length}` }),
           ),
           h('div', { class: 'muted', style: 'margin-top:10px', text: '点一个圆点，看这个人的详细关系' }),
         ),
@@ -569,7 +917,16 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
           'div',
           { class: 'tag-row' },
           h('span', { class: 'tag', text: person.role === 'teacher' ? '老师' : '学生' }),
-          person.group ? h('span', { class: 'tag', text: person.group }) : null,
+          ...(person.groupIds ?? []).map((gid) => {
+            const g = groupById.get(gid);
+            return g
+              ? h(
+                  'span',
+                  { class: 'tag', style: 'cursor:pointer', onclick: () => select(groupNodeId(gid)) },
+                  g.name,
+                )
+              : null;
+          }),
           ...person.tags.map((t) => h('span', { class: 'tag', text: t })),
           h('span', { class: 'tag', text: `关系 ${rels.length}` }),
         ),
@@ -688,6 +1045,14 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
 
 /** 分类配色：学生/老师用固定色，其他按名字散列 */
 const ROLE_COLORS: Record<string, string> = { 学生: '#38bdf8', 老师: '#f59e0b' };
+
+/** 群组节点按类型配色 */
+const GROUP_KIND_COLORS: Record<string, string> = {
+  小组: '#34d399',
+  宿舍: '#a78bfa',
+  社团: '#f472b6',
+  其他: '#94a3b8',
+};
 function colorOfStatic(key: string): string {
   if (ROLE_COLORS[key]) return ROLE_COLORS[key];
   const palette = ['#22d3ee', '#34d399', '#a78bfa', '#f472b6', '#fbbf24', '#fb923c', '#4ade80', '#60a5fa', '#f87171'];

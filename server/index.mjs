@@ -30,6 +30,7 @@ import {
   destroySession,
   ensureSeed,
   getEvents,
+  getGroups,
   getLinkTypes,
   getLinks,
   getPeople,
@@ -39,6 +40,7 @@ import {
   isAdmin,
   publicUser,
   saveEvents,
+  saveGroups,
   saveLinkTypes,
   saveLinks,
   savePeople,
@@ -71,6 +73,13 @@ app.use(express.json({ limit: '1mb' }));
 const str = (value) => (typeof value === 'string' ? value.trim() : '');
 const asArray = (value) => (Array.isArray(value) ? value : []);
 const findPerson = (id) => getPeople().find((p) => p.id === id) ?? null;
+/** 只保留真实存在的群组 id，避免脏数据 */
+const cleanGroupIds = (value) => {
+  const known = new Set(getGroups().map((g) => g.id));
+  return asArray(value)
+    .map(str)
+    .filter((id) => id && known.has(id));
+};
 const bearer = (req) => {
   const header = req.headers.authorization ?? '';
   return header.startsWith('Bearer ') ? header.slice(7).trim() : '';
@@ -83,6 +92,7 @@ function buildBootstrap(user) {
     me: publicUser(user),
     roles: ROLES.map((id) => ({ id, label: ROLE_LABELS[id], desc: ROLE_DESC[id] })),
     people: getPeople(),
+    groups: getGroups(),
     links: getLinks(),
     events: getEvents(),
     linkTypes: getLinkTypes(),
@@ -180,6 +190,112 @@ app.post('/api/auth/password', auth, (req, res) => {
 app.get('/api/bootstrap', auth, (req, res) => res.json(buildBootstrap(req.user)));
 
 /* ------------------------------------------------------------------ *
+ * 群组（小组 / 宿舍 / 社团…）：图上的长方形节点
+ * ------------------------------------------------------------------ */
+const GROUP_KINDS = ['小组', '宿舍', '社团', '其他'];
+const MAX_GROUP_NAME = 16;
+
+app.post('/api/groups', auth, editorOnly, (req, res) => {
+  const name = str(req.body?.name);
+  if (!name) {
+    res.status(400).json({ error: '群组名称不能空着' });
+    return;
+  }
+  if (name.length > MAX_GROUP_NAME) {
+    res.status(400).json({ error: `名称最多 ${MAX_GROUP_NAME} 个字` });
+    return;
+  }
+  const groups = getGroups();
+  if (groups.some((g) => g.name === name)) {
+    res.status(400).json({ error: '已经有这个群组了' });
+    return;
+  }
+  const group = {
+    id: randomUUID(),
+    name,
+    kind: GROUP_KINDS.includes(req.body?.kind) ? req.body.kind : '其他',
+    note: str(req.body?.note),
+    createdAt: Date.now(),
+  };
+  groups.push(group);
+  saveGroups(groups);
+  res.json({ group });
+});
+
+app.patch('/api/groups/:id', auth, editorOnly, (req, res) => {
+  const groups = getGroups();
+  const group = groups.find((g) => g.id === req.params.id);
+  if (!group) {
+    res.status(404).json({ error: '找不到这个群组' });
+    return;
+  }
+  const body = req.body ?? {};
+  if ('name' in body && str(body.name)) {
+    const name = str(body.name);
+    if (groups.some((g) => g.name === name && g.id !== group.id)) {
+      res.status(400).json({ error: '已经有这个群组了' });
+      return;
+    }
+    group.name = name;
+  }
+  if ('kind' in body && GROUP_KINDS.includes(body.kind)) group.kind = body.kind;
+  if ('note' in body) group.note = str(body.note);
+  saveGroups(groups);
+  res.json({ group });
+});
+
+app.delete('/api/groups/:id', auth, editorOnly, (req, res) => {
+  const groups = getGroups();
+  const index = groups.findIndex((g) => g.id === req.params.id);
+  if (index < 0) {
+    res.status(404).json({ error: '找不到这个群组' });
+    return;
+  }
+  const [removed] = groups.splice(index, 1);
+  saveGroups(groups);
+
+  // 把成员的归属一并摘掉
+  const people = getPeople();
+  let changed = 0;
+  for (const person of people) {
+    if (Array.isArray(person.groupIds) && person.groupIds.includes(removed.id)) {
+      person.groupIds = person.groupIds.filter((id) => id !== removed.id);
+      changed += 1;
+    }
+  }
+  if (changed) savePeople(people);
+
+  res.json({ ok: true, removedMembers: changed });
+});
+
+/** 批量加入 / 移出成员：{ personIds: [...], mode: 'add' | 'remove' } */
+app.post('/api/groups/:id/members', auth, editorOnly, (req, res) => {
+  const group = getGroups().find((g) => g.id === req.params.id);
+  if (!group) {
+    res.status(404).json({ error: '找不到这个群组' });
+    return;
+  }
+  const personIds = asArray(req.body?.personIds).map(str).filter(Boolean);
+  const remove = req.body?.mode === 'remove';
+  const people = getPeople();
+  let changed = 0;
+  for (const person of people) {
+    if (!Array.isArray(person.groupIds)) person.groupIds = [];
+    const has = person.groupIds.includes(group.id);
+    if (!personIds.includes(person.id)) continue;
+    if (!remove && !has) {
+      person.groupIds.push(group.id);
+      changed += 1;
+    } else if (remove && has) {
+      person.groupIds = person.groupIds.filter((id) => id !== group.id);
+      changed += 1;
+    }
+  }
+  if (changed) savePeople(people);
+  res.json({ ok: true, changed });
+});
+
+/* ------------------------------------------------------------------ *
  * 人物
  * ------------------------------------------------------------------ */
 app.post('/api/people', auth, editorOnly, (req, res) => {
@@ -193,7 +309,7 @@ app.post('/api/people', auth, editorOnly, (req, res) => {
     id: randomUUID(),
     name,
     role: req.body?.role === 'teacher' ? 'teacher' : 'student',
-    group: str(req.body?.group),
+    groupIds: cleanGroupIds(req.body?.groupIds),
     tags: asArray(req.body?.tags).map(str).filter(Boolean),
     note: str(req.body?.note),
     createdAt: Date.now(),
@@ -213,7 +329,7 @@ app.patch('/api/people/:id', auth, editorOnly, (req, res) => {
   const body = req.body ?? {};
   if ('name' in body && str(body.name)) person.name = str(body.name);
   if ('role' in body) person.role = body.role === 'teacher' ? 'teacher' : 'student';
-  if ('group' in body) person.group = str(body.group);
+  if ('groupIds' in body) person.groupIds = cleanGroupIds(body.groupIds);
   if ('tags' in body) person.tags = asArray(body.tags).map(str).filter(Boolean);
   if ('note' in body) person.note = str(body.note);
   savePeople(people);
