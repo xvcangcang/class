@@ -1,4 +1,4 @@
-# 班级图谱（class-atlas）
+# Class Analysis Platform（class-atlas）
 
 把班上的人和关系，画成一张一眼就懂的图。附带班级事件记录和账号权限系统。
 

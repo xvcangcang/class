@@ -450,7 +450,7 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log('班级图谱服务已启动');
+  console.log('Class Analysis Platform server started');
   console.log(`  地址：http://0.0.0.0:${PORT}`);
   console.log(`  数据目录：${DATA_DIR}`);
   console.log(`  静态目录：${DIST_DIR}${existsSync(INDEX_HTML) ? '' : ' （还没有构建产物）'}`);

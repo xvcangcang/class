@@ -52,7 +52,7 @@ export function renderLogin(root: HTMLElement, onSuccess: () => Promise<void> | 
       h(
         'div',
         { class: 'login-card' },
-        h('h1', { text: '班级图谱' }),
+        h('h1', { text: 'Class Analysis Platform' }),
         h(
           'div',
           { class: 'sub' },
@@ -61,11 +61,6 @@ export function renderLogin(root: HTMLElement, onSuccess: () => Promise<void> | 
           '登录后才能查看；每个人按自己的权限，能看 / 能改的东西不一样。',
         ),
         form,
-        h('div', {
-          class: 'muted',
-          style: 'margin-top:18px;text-align:center;font-size:12px',
-          text: '默认管理员：admin / admin123（登录后请尽快改密码）',
-        }),
       ),
     ),
   );

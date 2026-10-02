@@ -135,7 +135,11 @@ export function publicUser(user) {
 }
 
 /* ------------------------------------------------------------------ *
- * 首次运行种子数据 —— 保证一部署就能看到一张像样的图
+ * 首次运行初始化
+ *
+ * 只创建默认管理员账号；人物 / 关系 / 事件一律留空，由使用者在界面里自己录入。
+ * 注意：本函数只在文件「不存在」时创建，所以要让已部署的实例也清空，
+ * 得删掉数据目录下的 people.json / links.json / events.json，或走接口删。
  * ------------------------------------------------------------------ */
 export function ensureSeed() {
   mkdirSync(DATA_DIR, { recursive: true });
@@ -154,87 +158,7 @@ export function ensureSeed() {
     ]);
   }
 
-  if (!existsSync(fileOf('people'))) {
-    const now = Date.now();
-    const people = [
-      ['王老师', 'teacher', '教师办公室', ['班主任', '数学']],
-      ['李老师', 'teacher', '教师办公室', ['语文']],
-      ['张老师', 'teacher', '教师办公室', ['英语']],
-      ['同学A', 'student', '第一组', ['班长']],
-      ['同学B', 'student', '第一组', ['体育委员']],
-      ['同学C', 'student', '第二组', []],
-      ['同学D', 'student', '第二组', ['学习委员']],
-      ['同学E', 'student', '第三组', []],
-      ['同学F', 'student', '第三组', ['文艺委员']],
-      ['同学G', 'student', '第四组', []],
-      ['同学H', 'student', '第四组', []],
-    ].map(([name, role, group, tags]) => ({
-      id: randomUUID(),
-      name,
-      role,
-      group,
-      tags,
-      note: '',
-      createdAt: now,
-    }));
-    savePeople(people);
-
-    const by = (name) => people.find((p) => p.name === name)?.id;
-    const link = (source, target, type, weight) => ({
-      id: randomUUID(),
-      source: by(source),
-      target: by(target),
-      type,
-      weight,
-    });
-    saveLinks([
-      link('王老师', '同学A', '班主任', 3),
-      link('王老师', '同学B', '班主任', 3),
-      link('王老师', '同学C', '班主任', 3),
-      link('李老师', '同学D', '任教', 2),
-      link('李老师', '同学E', '任教', 2),
-      link('张老师', '同学F', '任教', 2),
-      link('张老师', '同学G', '任教', 2),
-      link('同学A', '同学B', '好友', 3),
-      link('同学A', '同学C', '同桌', 2),
-      link('同学A', '同学D', '好友', 2),
-      link('同学B', '同学D', '好友', 2),
-      link('同学C', '同学E', '同宿舍', 3),
-      link('同学D', '同学F', '同桌', 2),
-      link('同学E', '同学F', '好友', 2),
-      link('同学G', '同学H', '同桌', 2),
-      link('同学F', '同学H', '同社团', 1),
-    ]);
-
-    const pid = (name) => (by(name) ? [by(name)] : []);
-    saveEvents([
-      {
-        id: randomUUID(),
-        date: '2026-09-01',
-        title: '开学报到',
-        detail: '全班第一次见面，分配座位与宿舍。',
-        participants: [...pid('同学A'), ...pid('同学B'), ...pid('王老师')],
-        createdBy: 'system',
-        updatedAt: now,
-      },
-      {
-        id: randomUUID(),
-        date: '2026-09-28',
-        title: '秋季运动会',
-        detail: '同学B 拿了 800 米第二名。',
-        participants: [...pid('同学B'), ...pid('同学A')],
-        createdBy: 'system',
-        updatedAt: now,
-      },
-      {
-        id: randomUUID(),
-        date: '2026-10-01',
-        title: '第一次月考',
-        detail: '全班参加，之后按成绩调整小组。',
-        participants: people.filter((p) => p.role === 'student').map((p) => p.id),
-        createdBy: 'system',
-        updatedAt: now,
-      },
-    ]);
-  }
+  if (!existsSync(fileOf('people'))) writeJson('people', []);
+  if (!existsSync(fileOf('links'))) writeJson('links', []);
+  if (!existsSync(fileOf('events'))) writeJson('events', []);
 }

@@ -96,7 +96,7 @@ function renderShell() {
   const topbar = h(
     'div',
     { class: 'topbar' },
-    h('div', { class: 'brand' }, h('span', { class: 'dot' }), '班级图谱'),
+    h('div', { class: 'brand' }, h('span', { class: 'dot' }), 'Class Analysis Platform'),
     tabsEl,
     h(
       'div',
@@ -127,7 +127,7 @@ function renderShell() {
   app.append(
     topbar,
     page,
-    h('div', { class: 'footer-note', text: `班级图谱 v${data.version} · 数据只保存在你自己部署的服务器上` }),
+    h('div', { class: 'footer-note', text: `Class Analysis Platform v${data.version} · 数据只保存在你自己部署的服务器上` }),
   );
 
   renderCurrentTab(page);
