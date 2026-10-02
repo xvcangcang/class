@@ -112,6 +112,8 @@ export interface Bootstrap {
   version: string;
   canEdit: boolean;
   isAdmin: boolean;
+  /** 当前这次登录是否处于无痕模式（管理员专用） */
+  incognito: boolean;
 }
 
 /** 关系类型的默认值：服务端首次运行会写进 link-types.json，之后由使用者自己增删改 */

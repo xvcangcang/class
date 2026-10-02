@@ -112,6 +112,13 @@ export const api = {
     request<{ user: User }>(`/users/${id}`, { method: 'PATCH', body }),
   deleteUser: (id: string) => request<{ ok: boolean }>(`/users/${id}`, { method: 'DELETE' }),
 
+  /* 无痕模式（仅管理员）：打开后本次登录的操作不写日志；开启时可填原因，会记进日志 */
+  setIncognito: (enabled: boolean, reason = '') =>
+    request<{ incognito: boolean; changed: boolean }>('/audit/incognito', {
+      method: 'POST',
+      body: { enabled, reason },
+    }),
+
   /* 操作日志（所有登录用户） */
   listLogs: (params: { q?: string; action?: string; result?: string; limit?: number } = {}) => {
     const search = new URLSearchParams();

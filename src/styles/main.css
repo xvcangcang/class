@@ -804,3 +804,35 @@ tr:hover td {
   border-color: rgba(56, 189, 248, 0.4);
   background: rgba(56, 189, 248, 0.12);
 }
+
+/* ---------------- 无痕模式 ---------------- */
+.btn-warn {
+  color: #1b1300;
+  background: var(--warn);
+  border-color: var(--warn);
+  font-weight: 600;
+}
+.btn-warn:hover {
+  filter: brightness(1.08);
+}
+.incognito-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 20px 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(251, 191, 36, 0.55);
+  border-radius: 10px;
+  background: rgba(251, 191, 36, 0.14);
+  color: var(--warn);
+  font-size: 13px;
+}
+.incognito-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+.incognito-banner .btn {
+  border-color: rgba(251, 191, 36, 0.6);
+  color: var(--warn);
+  background: transparent;
+}

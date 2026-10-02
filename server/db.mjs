@@ -117,11 +117,34 @@ export function createSession(userId) {
 
 export function getSessionUser(token) {
   if (!token) return null;
+  const session = getSession(token);
+  if (!session) return null;
+  const users = readJson('users', []);
+  return users.find((u) => u.id === session.userId) ?? null;
+}
+
+/** 取会话本身（含 expiresAt / incognito 标记），过期或不存在返回 null */
+export function getSession(token) {
+  if (!token) return null;
   const sessions = readJson('sessions', {});
   const session = sessions[token];
   if (!session || session.expiresAt < Date.now()) return null;
-  const users = readJson('users', []);
-  return users.find((u) => u.id === session.userId) ?? null;
+  return session;
+}
+
+/**
+ * 无痕模式（审计静默）：只作用于当前这次登录会话。
+ * 打开后，这个会话里发生的操作不再写入操作日志；
+ * 关掉或换一台设备登录，记录恢复正常。
+ */
+export function setSessionIncognito(token, enabled) {
+  if (!token) return false;
+  const sessions = readJson('sessions', {});
+  const session = sessions[token];
+  if (!session || session.expiresAt < Date.now()) return false;
+  session.incognito = Boolean(enabled);
+  writeJson('sessions', sessions);
+  return true;
 }
 
 export function destroySession(token) {

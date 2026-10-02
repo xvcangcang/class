@@ -36,6 +36,7 @@ import {
   getLinks,
   getLogs,
   getPeople,
+  getSession,
   getSessionUser,
   getUsers,
   hashPassword,
@@ -47,6 +48,7 @@ import {
   saveLinks,
   savePeople,
   saveUsers,
+  setSessionIncognito,
   verifyPassword,
 } from './db.mjs';
 
@@ -99,8 +101,14 @@ const currentUser = (req) => getSessionUser(bearer(req));
  *   detail  补充说明（改动了哪些字段、连带影响了多少条数据）
  *   ok      成功还是失败
  * ------------------------------------------------------------------ */
+
+/** 当前这次登录会话是否处于无痕模式（管理员专用，见 setSessionIncognito） */
+const isIncognito = (req) => Boolean(getSession(bearer(req))?.incognito);
+
 function logAction(req, { action, target = '', detail = '', ok = true }) {
   try {
+    // 无痕模式：这个会话里的操作不写日志（开关本身的记录由调用方在切换前后补上）
+    if (isIncognito(req)) return;
     const user = req.user ?? null;
     const ip =
       String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() ||
@@ -142,7 +150,7 @@ function changedFields(before, after, labels) {
 }
 
 /** 组装前端一次拉取所需的全部数据（按当前用户权限裁剪） */
-function buildBootstrap(user) {
+function buildBootstrap(user, incognito = false) {
   const data = {
     me: publicUser(user),
     roles: ROLES.map((id) => ({ id, label: ROLE_LABELS[id], desc: ROLE_DESC[id] })),
@@ -155,6 +163,7 @@ function buildBootstrap(user) {
     version: APP_VERSION,
     canEdit: canEdit(user),
     isAdmin: isAdmin(user),
+    incognito,
   };
   if (isAdmin(user)) data.users = getUsers().map(publicUser);
   return data;
@@ -252,7 +261,49 @@ app.post('/api/auth/password', auth, (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/bootstrap', auth, (req, res) => res.json(buildBootstrap(req.user)));
+app.get('/api/bootstrap', auth, (req, res) => res.json(buildBootstrap(req.user, isIncognito(req))));
+
+/* ------------------------------------------------------------------ *
+ * 无痕模式（管理员）：打开后本次登录的操作不写日志
+ *
+ * 诚实起见，开关本身仍然留痕 —— 打开时先记一条，关闭后再记一条。
+ * 这样日志里会明确留下一段「这里有一段无痕操作」的区间，
+ * 而不是凭空消失，事后不会说不清。
+ * ------------------------------------------------------------------ */
+app.get('/api/audit/incognito', auth, adminOnly, (req, res) => {
+  res.json({ incognito: isIncognito(req) });
+});
+
+app.post('/api/audit/incognito', auth, adminOnly, (req, res) => {
+  const enabled = Boolean(req.body?.enabled);
+  const reason = str(req.body?.reason).slice(0, 120);
+  const token = bearer(req);
+  const before = isIncognito(req);
+  if (before === enabled) {
+    res.json({ incognito: enabled, changed: false });
+    return;
+  }
+  if (enabled) {
+    // 先记「开启」（带上原因），再真正切到无痕
+    logAction(req, {
+      action: '开启无痕模式',
+      target: req.user.username,
+      detail: reason
+        ? `原因：${reason}；从这里开始的操作不再写入日志，直到关闭无痕模式`
+        : '未填写原因；从这里开始的操作不再写入日志，直到关闭无痕模式',
+    });
+    setSessionIncognito(token, true);
+  } else {
+    // 先切回正常，再补记一条「关闭」
+    setSessionIncognito(token, false);
+    logAction(req, {
+      action: '关闭无痕模式',
+      target: req.user.username,
+      detail: '以上无痕区间结束，操作恢复记录',
+    });
+  }
+  res.json({ incognito: enabled, changed: true });
+});
 
 /* ------------------------------------------------------------------ *
  * 群组（小组 / 宿舍 / 社团…）：图上的长方形节点

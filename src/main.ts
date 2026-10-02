@@ -105,6 +105,17 @@ function renderShell() {
       { class: 'userbox' },
       h('span', { text: data.me.displayName }),
       h('span', { class: `role-badge role-${data.me.role}`, text: roleInfo?.label ?? data.me.role }),
+      data.isAdmin
+        ? h(
+            'button',
+            {
+              class: `btn btn-sm ${data.incognito ? 'btn-warn' : ''}`,
+              title: '开启后，你的操作不会被写入操作日志（开关本身仍会留痕）',
+              onclick: () => toggleIncognito(data.incognito),
+            },
+            data.incognito ? '无痕中 · 点此关闭' : '无痕模式',
+          )
+        : null,
       h('button', { class: 'btn btn-sm', onclick: () => openChangePassword() }, '改密码'),
       h(
         'button',
@@ -126,8 +137,20 @@ function renderShell() {
     ),
   );
 
+  const incognitoBanner = data.incognito
+    ? h(
+        'div',
+        { class: 'incognito-banner' },
+        h('span', { class: 'incognito-icon', text: '🕶️' }),
+        h('span', { text: '无痕模式已开启：接下来的操作不会写入操作日志' }),
+        h('div', { class: 'spacer' }),
+        h('button', { class: 'btn btn-sm', onclick: () => toggleIncognito(true) }, '关闭无痕'),
+      )
+    : null;
+
+  app.append(topbar);
+  if (incognitoBanner) app.append(incognitoBanner);
   app.append(
-    topbar,
     page,
     h('div', { class: 'footer-note', text: `Class Analysis Platform v${data.version} · 数据只保存在你自己部署的服务器上` }),
   );
@@ -151,6 +174,41 @@ function renderCurrentTab(page: HTMLElement) {
   else if (currentTab === 'people') cleanup = renderPeople(page, refresh);
   else if (currentTab === 'logs') cleanup = renderLogs(page);
   else if (currentTab === 'accounts') cleanup = renderAccounts(page, refresh);
+}
+
+/** 无痕模式开关（仅管理员）：打开后本次登录的操作不写日志 */
+async function toggleIncognito(current: boolean) {
+  // 关闭：直接恢复记录
+  if (current) {
+    try {
+      await api.setIncognito(false);
+      toast('已关闭无痕模式，恢复记录', 'ok');
+    } catch (err) {
+      toast((err as Error).message, 'err');
+    }
+    await boot();
+    return;
+  }
+
+  // 开启：让管理员写一句原因，会记进日志，方便以后看懂为什么开
+  showForm({
+    title: '开启无痕模式',
+    submitText: '开启无痕',
+    fields: [
+      {
+        name: 'reason',
+        label: '为什么开无痕？（会记进操作日志）',
+        type: 'textarea',
+        placeholder: '例如：整理敏感数据、给同学演示、刚才录错了想重来…',
+        help: '开启后你的操作不再写入日志；「开启」与「关闭」这两步本身仍会留痕，日志里能看到这段无痕区间的起止与原因。',
+      },
+    ],
+    onSubmit: async (values) => {
+      await api.setIncognito(true, values.reason ?? '');
+      toast('无痕模式已开启，操作将不再记录', 'ok');
+      await boot();
+    },
+  });
 }
 
 function openChangePassword() {
