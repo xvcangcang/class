@@ -60,5 +60,14 @@ export default defineConfig({
     assetsDir: 'assets',
     sourcemap: false,
     target: 'es2022',
+    /**
+     * 入口 HTML 故意不叫 index.html、也不放在仓库根目录 —— PocketBay 的
+     * framework 识别里「根目录 index.html」会被判成纯静态站点（只起 nginx、不跑接口）。
+     * 改叫 app.html 之后平台才会按 package.json 的 start 脚本识别成 node 服务。
+     * 构建产物里再复制一份 index.html，方便静态托管和本地直接访问。
+     */
+    rollupOptions: {
+      input: fileURLToPath(new URL('./app.html', import.meta.url)),
+    },
   },
 });

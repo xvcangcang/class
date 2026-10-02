@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit",
-    "build": "vite build",
+    "build": "vite build && cp dist/app.html dist/index.html",
     "build:check": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "server": "node server/index.mjs",
