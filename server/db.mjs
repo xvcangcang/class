@@ -161,4 +161,38 @@ export function ensureSeed() {
   if (!existsSync(fileOf('people'))) writeJson('people', []);
   if (!existsSync(fileOf('links'))) writeJson('links', []);
   if (!existsSync(fileOf('events'))) writeJson('events', []);
+
+  clearLegacyDemoData();
+}
+
+/**
+ * v0.1.0 曾在首次运行时预置 11 个示例人物、16 条关系和 3 条事件。
+ * 这里做一次性清理（用标记文件保证只执行一次），
+ * 之后 people / links / events 只会是使用者自己录入的数据。
+ */
+const LEGACY_DEMO_NAMES = [
+  '王老师',
+  '李老师',
+  '张老师',
+  '同学A',
+  '同学B',
+  '同学C',
+  '同学D',
+  '同学E',
+  '同学F',
+  '同学G',
+  '同学H',
+];
+
+function clearLegacyDemoData() {
+  const flag = join(DATA_DIR, '.cleared-legacy-demo');
+  if (existsSync(flag)) return;
+  const people = getPeople();
+  if (people.some((p) => LEGACY_DEMO_NAMES.includes(p.name))) {
+    writeJson('people', []);
+    writeJson('links', []);
+    writeJson('events', []);
+    console.log('已清除旧版预置的示例人物与事件');
+  }
+  writeFileSync(flag, new Date().toISOString());
 }
