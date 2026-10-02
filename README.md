@@ -29,7 +29,7 @@
 ## 技术栈
 
 - 前端：Vite 6 + TypeScript + ECharts 5（原生 DOM，无框架）
-- 后端：**零依赖** Node 服务（只用内置 `http` / `crypto` / `fs`）
+- 后端：Express 4 单体服务（`server/index.mjs`），同一个进程既托管静态页面又提供 `/api/*`
 - 存储：JSON 文件。线上落在 PocketBay 持久卷 `/data`（读 `POCKETBAY_DATA_DIR`），本地落在 `./data`
 - 密码：`scrypt` 加盐哈希，不存明文；登录令牌 7 天过期
 
@@ -80,3 +80,34 @@ npm start               # 构建 + 起服务，打开 http://127.0.0.1:8787
 ## 隐私提醒
 
 涉及同学信息，建议用昵称或代号，别把真实姓名放到公开网络。
+
+## 部署到 PocketBay
+
+线上地址：<https://class-atlas.pocketbay.app> （node 运行时，数据在 `/data` 持久卷，跨更新保留）
+
+### 部署时踩过的三个坑（改仓库前先看这里）
+
+1. **后端必须用框架（Express），不能是零依赖的 `node:http`。**
+   平台按依赖判断运行时类型。纯内置模块的服务会被识别成 `static` —— 只起 nginx 托管 `dist/`，
+   `/api/*` 全部回退成页面，登录和所有写操作都失效。加上 Express 后平台立刻识别为 `framework: node`。
+2. **仓库根目录不能有 `index.html`。**
+   平台文档写明 static 的判定条件就是「根目录 index.html」。所以入口改叫 `app.html`，
+   构建后由 Vite 插件复制一份成 `dist/index.html`，供静态回退使用。
+3. **`build` / `start` 脚本不要用 `&&` 串命令。**
+   平台解析启动命令时会把链式命令里的 `cp` 当成「启动入口」，报 `listing_truncated`。
+   复制文件改成 Vite 插件（`copy-app-html-to-index`）完成。
+
+另外：`Dockerfile` 反而会让平台走「构建镜像 → 只抽取静态产物」的路径，同样固定成 static，所以本项目不带它。
+
+### 部署命令
+
+```bash
+# 打包（排除依赖、git、构建产物、本地数据）
+tar --exclude='./node_modules' --exclude='./.git' \
+    --exclude='./dist' --exclude='./data' \
+    -czf /tmp/class-atlas.tar.gz .
+
+# 用配对会话上传（POST /api/deploy/sessions/upload），
+# 然后轮询 /api/deploy/sessions/status 直到 project_status=running
+# framework 必须显示 node 才算对
+```
