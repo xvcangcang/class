@@ -77,7 +77,8 @@ npm start               # 构建 + 起服务，打开 http://127.0.0.1:8787
 - **登录失败也会记**，方便发现有人乱试密码。
 - 每条包含：操作人、动作、对象、说明（改动了哪些字段、连带影响多少条数据）、成功还是失败、来源 IP。
 - 界面只展示和导出，**没有删除入口**；日志文件在 `logs.json`，写失败也不会影响正常业务。
-- 入口：管理员登录后，顶栏「操作日志」标签页；支持关键字搜索、按动作 / 结果筛选，可一键导出 CSV（Excel 可直接打开）。
+- 入口：**任意账号**登录后，顶栏「操作日志」标签页；支持关键字搜索、按动作 / 结果筛选，可一键导出 CSV（Excel 可直接打开）。
+- 三种角色都能查看日志（只读，不能修改或删除），方便互相监督。
 
 ## 接口一览
 
@@ -87,7 +88,7 @@ npm start               # 构建 + 起服务，打开 http://127.0.0.1:8787
 | GET | `/api/bootstrap` | 登录后（管理员才返回账号列表） |
 | POST/PATCH/DELETE | `/api/people`、`/api/links`、`/api/events` | editor 及以上 |
 | GET/POST/PATCH/DELETE | `/api/users` | admin |
-| GET | `/api/logs` | admin（支持 `q` / `action` / `result` / `limit` 筛选） |
+| GET | `/api/logs` | 登录用户（支持 `q` / `action` / `result` / `limit` 筛选） |
 | GET | `/api/health` | 公开（部署健康检查用） |
 
 ## 隐私提醒

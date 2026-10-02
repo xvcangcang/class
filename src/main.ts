@@ -16,7 +16,7 @@ const TABS = [
   { id: 'graph', label: '关系图' },
   { id: 'events', label: '班级事件' },
   { id: 'people', label: '人物' },
-  { id: 'logs', label: '操作日志', adminOnly: true },
+  { id: 'logs', label: '操作日志' },
   { id: 'accounts', label: '账号', adminOnly: true },
 ] as const;
 

@@ -112,7 +112,7 @@ export const api = {
     request<{ user: User }>(`/users/${id}`, { method: 'PATCH', body }),
   deleteUser: (id: string) => request<{ ok: boolean }>(`/users/${id}`, { method: 'DELETE' }),
 
-  /* 操作日志（仅管理员） */
+  /* 操作日志（所有登录用户） */
   listLogs: (params: { q?: string; action?: string; result?: string; limit?: number } = {}) => {
     const search = new URLSearchParams();
     if (params.q) search.set('q', params.q);

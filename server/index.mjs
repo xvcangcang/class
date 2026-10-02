@@ -953,9 +953,9 @@ app.delete('/api/users/:id', auth, adminOnly, (req, res) => {
 });
 
 /* ------------------------------------------------------------------ *
- * 操作日志查询（仅管理员可看，因为里面会涉及账号操作）
+ * 操作日志查询（所有登录用户都能看，方便互相监督、追溯是谁改的）
  * ------------------------------------------------------------------ */
-app.get('/api/logs', auth, adminOnly, (req, res) => {
+app.get('/api/logs', auth, (req, res) => {
   const all = getLogs();
   const q = str(req.query?.q).toLowerCase();
   const action = str(req.query?.action);
