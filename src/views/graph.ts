@@ -136,6 +136,19 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
   const chartEl = h('div', { id: 'chart' });
   const sideEl = h('div', { class: 'side' });
 
+  /* ---------- 缩放控件（滚轮 / 双指缩放不好用，给几个明确的按钮） ---------- */
+  const zoomLabel = h('div', { class: 'zoom-level', text: '100%' });
+  const zoomBtn = (label: string, title: string, onClick: () => void) =>
+    h('button', { class: 'zoom-btn', type: 'button', title, onclick: onClick }, label);
+  const zoomBox = h(
+    'div',
+    { class: 'zoom-controls' },
+    zoomBtn('＋', '放大', () => applyZoom(currentZoom() * 1.25)),
+    zoomBtn('－', '缩小', () => applyZoom(currentZoom() / 1.25)),
+    zoomBtn('⟲', '复位视图（重新布局并回到 100%）', () => resetZoom()),
+    zoomLabel,
+  );
+
   const keywordInput = h('input', {
     class: 'input',
     placeholder: '搜索名字…',
@@ -211,7 +224,7 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
     h(
       'div',
       { class: 'graph-layout' },
-      h('div', { class: 'card graph-card' }, toolbar, chartEl),
+      h('div', { class: 'card graph-card' }, toolbar, chartEl, zoomBox),
       sideEl,
     ),
   );
@@ -219,8 +232,41 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
   const chart = echarts.init(chartEl, 'dark', { renderer: 'canvas' });
   chart.getDom().style.background = 'transparent';
 
+  /* ---------- 缩放 ---------- */
+  function currentZoom(): number {
+    const option = chart.getOption() as any;
+    const zoom = option?.series?.[0]?.zoom;
+    return typeof zoom === 'number' && zoom > 0 ? zoom : 1;
+  }
+
+  function setZoomLabel(zoom: number): void {
+    zoomLabel.textContent = `${Math.round(zoom * 100)}%`;
+  }
+
+  function applyZoom(next: number): void {
+    const zoom = Math.min(8, Math.max(0.25, next));
+    chart.setOption({ series: [{ zoom }] } as any);
+    setZoomLabel(zoom);
+  }
+
+  /** 复位：回到 100% 并重新跑一次布局（节点散在画布外时也能收回来） */
+  function resetZoom(): void {
+    chart.setOption({ series: [{ zoom: 1 }] } as any);
+    setZoomLabel(1);
+    applyOption();
+  }
+
+  // 用户自己滚轮 / 双指缩放时，同步一下百分比
+  chart.on('graphroam', () => {
+    window.setTimeout(() => setZoomLabel(currentZoom()), 0);
+  });
+
   /* ---------- ECharts option ---------- */
   function applyOption() {
+    // 保留当前缩放级别，避免筛选 / 搜索之后整张图跳回原样
+    const prevOption = chart.getOption() as any;
+    const prevZoom = typeof prevOption?.series?.[0]?.zoom === 'number' ? prevOption.series[0].zoom : 1;
+
     const links = data.links.filter(
       (l) => !viewState.hiddenTypes.has(l.type) && byId.has(l.source) && byId.has(l.target),
     );
@@ -291,6 +337,7 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
           roam: true,
           draggable: true,
           selectedMode: 'single',
+          zoom: prevZoom,
           categories: categoryList.map((name) => ({ name, itemStyle: { color: categoryColors[name] } })),
           data: nodes,
           links: links.map((l) => ({
@@ -492,6 +539,7 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
   function render() {
     applyOption();
     renderSide();
+    setZoomLabel(currentZoom());
   }
 
   chart.on('click', (params: any) => {
