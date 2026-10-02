@@ -130,7 +130,11 @@ export function showForm(config: {
 }): void {
   const readers: { field: FieldDef; read: () => any }[] = [];
   const errorEl = h('div', { class: 'field-error', style: 'color:var(--danger);font-size:13px;min-height:18px;margin-bottom:6px' });
-  const saveBtn = h('button', { class: 'btn btn-primary', type: 'submit' }, config.submitText ?? '保存');
+  const saveBtn = h(
+    'button',
+    { class: 'btn btn-primary', type: 'submit' },
+    config.submitText ?? '保存',
+  ) as HTMLButtonElement;
 
   const rows = config.fields.map((field) => {
     const type = field.type ?? 'text';

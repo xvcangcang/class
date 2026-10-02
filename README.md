@@ -1,0 +1,82 @@
+# 班级图谱（class-atlas）
+
+把班上的人和关系，画成一张一眼就懂的图。附带班级事件记录和账号权限系统。
+
+> 数据只保存在你自己部署的服务器上，不往外面传。
+
+## 能干什么
+
+| 模块 | 说明 |
+| --- | --- |
+| 关系图 | ECharts 力导向网络图。点的大小 = 关系多少，线粗细 = 亲密度；可按角色 / 小组着色，可按关系类型筛选，可搜索名字 |
+| 个人视图 | 点某个圆点，右侧看这个人的全部关系、参与过的事件 |
+| 班级事件 | 时间线记录「什么时候发生了什么事」，可挂上参与的人 |
+| 人物 | 人物卡片墙，按老师 / 学生分组 |
+| 账号与权限 | 每人一个账号，三级权限，能看 / 能改的都不一样 |
+
+## 三级权限
+
+| 等级 | 能做什么 |
+| --- | --- |
+| 管理员 admin | 管理账号、编辑全部内容 |
+| 编辑者 editor | 编辑人物 / 关系 / 事件，但看不到账号管理 |
+| 只读 viewer | 只能查看，页面上的编辑按钮直接不出现 |
+
+后端对每个写接口都会再校验一次权限，**不是靠前端藏按钮**。
+
+默认管理员：`admin` / `admin123` —— 登录后请立刻改密码。
+
+## 技术栈
+
+- 前端：Vite 6 + TypeScript + ECharts 5（原生 DOM，无框架）
+- 后端：**零依赖** Node 服务（只用内置 `http` / `crypto` / `fs`）
+- 存储：JSON 文件。线上落在 PocketBay 持久卷 `/data`（读 `POCKETBAY_DATA_DIR`），本地落在 `./data`
+- 密码：`scrypt` 加盐哈希，不存明文；登录令牌 7 天过期
+
+## 本地开发
+
+```bash
+npm install
+
+# 方式一：开发模式（热更新）
+npm run server          # 终端 A：API 服务，127.0.0.1:8787
+npm run dev             # 终端 B：Vite 5173，/api 自动代理到 8787
+
+# 方式二：跑生产构建
+npm start               # 构建 + 起服务，打开 http://127.0.0.1:8787
+```
+
+## 环境变量
+
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `PORT` | 8787 | 服务端口，PocketBay 会自动注入 |
+| `POCKETBAY_DATA_DIR` | `./data` | 数据目录，线上是持久卷 `/data` |
+| `DIST_DIR` | `../dist` | 静态文件目录 |
+
+## 数据结构
+
+```jsonc
+// people.json
+{ "id": "uuid", "name": "同学A", "role": "student|teacher", "group": "第一组", "tags": ["班长"], "note": "" }
+
+// links.json
+{ "id": "uuid", "source": "<personId>", "target": "<personId>", "type": "好友", "weight": 3 }
+
+// events.json
+{ "id": "uuid", "date": "2026-09-01", "title": "开学报到", "detail": "…", "participants": ["<personId>"], "createdBy": "管理员" }
+```
+
+## 接口一览
+
+| 方法 | 路径 | 权限 |
+| --- | --- | --- |
+| POST | `/api/auth/login` | 公开 |
+| GET | `/api/bootstrap` | 登录后（管理员才返回账号列表） |
+| POST/PATCH/DELETE | `/api/people`、`/api/links`、`/api/events` | editor 及以上 |
+| GET/POST/PATCH/DELETE | `/api/users` | admin |
+| GET | `/api/health` | 公开（部署健康检查用） |
+
+## 隐私提醒
+
+涉及同学信息，建议用昵称或代号，别把真实姓名放到公开网络。
