@@ -30,6 +30,7 @@ import {
   destroySession,
   ensureSeed,
   getEvents,
+  getLinkTypes,
   getLinks,
   getPeople,
   getSessionUser,
@@ -38,6 +39,7 @@ import {
   isAdmin,
   publicUser,
   saveEvents,
+  saveLinkTypes,
   saveLinks,
   savePeople,
   saveUsers,
@@ -83,6 +85,7 @@ function buildBootstrap(user) {
     people: getPeople(),
     links: getLinks(),
     events: getEvents(),
+    linkTypes: getLinkTypes(),
     users: [],
     version: APP_VERSION,
     canEdit: canEdit(user),
@@ -236,6 +239,103 @@ app.delete('/api/people/:id', auth, editorOnly, (req, res) => {
     })),
   );
   res.json({ ok: true });
+});
+
+/* ------------------------------------------------------------------ *
+ * 关系类型（使用者可自己增删改）
+ * ------------------------------------------------------------------ */
+const MAX_TYPE_LENGTH = 12;
+
+app.post('/api/link-types', auth, editorOnly, (req, res) => {
+  const name = str(req.body?.name);
+  if (!name) {
+    res.status(400).json({ error: '类型名称不能空着' });
+    return;
+  }
+  if (name.length > MAX_TYPE_LENGTH) {
+    res.status(400).json({ error: `类型名称最多 ${MAX_TYPE_LENGTH} 个字` });
+    return;
+  }
+  if (/[/\\]/.test(name)) {
+    res.status(400).json({ error: '名称里不能有斜杠' });
+    return;
+  }
+  const types = getLinkTypes();
+  if (types.includes(name)) {
+    res.status(400).json({ error: '已经有这个类型了' });
+    return;
+  }
+  types.push(name);
+  saveLinkTypes(types);
+  res.json({ linkTypes: types });
+});
+
+app.patch('/api/link-types/:name', auth, editorOnly, (req, res) => {
+  const from = req.params.name;
+  const to = str(req.body?.name);
+  if (!to) {
+    res.status(400).json({ error: '新名称不能空着' });
+    return;
+  }
+  if (to.length > MAX_TYPE_LENGTH) {
+    res.status(400).json({ error: `类型名称最多 ${MAX_TYPE_LENGTH} 个字` });
+    return;
+  }
+  const types = getLinkTypes();
+  const index = types.indexOf(from);
+  if (index < 0) {
+    res.status(404).json({ error: '找不到这个类型' });
+    return;
+  }
+  if (to !== from && types.includes(to)) {
+    res.status(400).json({ error: '已经有这个类型了' });
+    return;
+  }
+  types[index] = to;
+  saveLinkTypes(types);
+
+  // 已有关系跟着一起改名
+  const links = getLinks();
+  let changed = 0;
+  for (const link of links) {
+    if (link.type === from) {
+      link.type = to;
+      changed += 1;
+    }
+  }
+  if (changed) saveLinks(links);
+
+  res.json({ linkTypes: types, updatedLinks: changed });
+});
+
+app.delete('/api/link-types/:name', auth, editorOnly, (req, res) => {
+  const name = req.params.name;
+  const types = getLinkTypes();
+  if (types.length <= 1) {
+    res.status(400).json({ error: '至少要留一个关系类型' });
+    return;
+  }
+  const index = types.indexOf(name);
+  if (index < 0) {
+    res.status(404).json({ error: '找不到这个类型' });
+    return;
+  }
+  types.splice(index, 1);
+  saveLinkTypes(types);
+
+  // 用到这个类型的关系改成「其他」（没有「其他」就用剩下的第一个）
+  const fallback = types.includes('其他') ? '其他' : types[0];
+  const links = getLinks();
+  let changed = 0;
+  for (const link of links) {
+    if (link.type === name) {
+      link.type = fallback;
+      changed += 1;
+    }
+  }
+  if (changed) saveLinks(links);
+
+  res.json({ linkTypes: types, updatedLinks: changed, fallback });
 });
 
 /* ------------------------------------------------------------------ *

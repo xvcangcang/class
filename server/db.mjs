@@ -22,8 +22,22 @@ const FILES = {
   people: 'people.json',
   links: 'links.json',
   events: 'events.json',
+  linkTypes: 'link-types.json',
   sessions: 'sessions.json',
 };
+
+/** 关系类型的默认值，只在首次运行时写入，之后由使用者在界面上自己维护 */
+export const DEFAULT_LINK_TYPES = [
+  '好友',
+  '同桌',
+  '同宿舍',
+  '同社团',
+  '小学同学',
+  '班主任',
+  '任教',
+  '搭班',
+  '其他',
+];
 
 /* ------------------------------------------------------------------ *
  * 基础读写（原子写：先写 .tmp 再 rename，避免写一半文件损坏）
@@ -125,6 +139,11 @@ export const getLinks = () => readJson('links', []);
 export const saveLinks = (list) => writeJson('links', list);
 export const getEvents = () => readJson('events', []);
 export const saveEvents = (list) => writeJson('events', list);
+export const getLinkTypes = () => {
+  const list = readJson('linkTypes', null);
+  return Array.isArray(list) && list.length ? list : [...DEFAULT_LINK_TYPES];
+};
+export const saveLinkTypes = (list) => writeJson('linkTypes', list);
 
 /** 对外输出用户信息时抹掉密码哈希 */
 export function publicUser(user) {
@@ -161,6 +180,7 @@ export function ensureSeed() {
   if (!existsSync(fileOf('people'))) writeJson('people', []);
   if (!existsSync(fileOf('links'))) writeJson('links', []);
   if (!existsSync(fileOf('events'))) writeJson('events', []);
+  if (!existsSync(fileOf('linkTypes'))) writeJson('linkTypes', DEFAULT_LINK_TYPES);
 
   clearLegacyDemoData();
 }

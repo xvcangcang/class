@@ -61,6 +61,14 @@ function openModal(mount: (close: () => void) => HTMLElement, onClose?: () => vo
   return close;
 }
 
+/* ---------------- 通用弹窗（对外开放，方便做列表型面板） ---------------- */
+export function openDialog(
+  render: (close: () => void) => HTMLElement,
+  onClose?: () => void,
+): () => void {
+  return openModal(render, onClose);
+}
+
 /* ---------------- 确认框 ---------------- */
 export function confirmDialog(title: string, message: string, danger = true): Promise<boolean> {
   return new Promise((resolve) => {

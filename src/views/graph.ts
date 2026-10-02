@@ -2,9 +2,8 @@
 import * as echarts from 'echarts';
 import { api } from '../api';
 import { getData } from '../state';
-import { LINK_TYPES } from '../types';
 import type { Person } from '../types';
-import { confirmDialog, h, showForm, toast } from '../ui';
+import { confirmDialog, h, openDialog, showForm, toast } from '../ui';
 
 /** 视图状态放在模块级，刷新后不会丢 */
 const viewState = {
@@ -90,7 +89,7 @@ export function linkForm(after: () => Promise<void>, preset?: Person): void {
         name: 'type',
         label: '关系类型',
         type: 'select',
-        options: LINK_TYPES.map((t) => ({ value: t, label: t })),
+        options: data.linkTypes.map((t) => ({ value: t, label: t })),
         value: '好友',
       },
       {
@@ -113,6 +112,130 @@ export function linkForm(after: () => Promise<void>, preset?: Person): void {
       await after();
     },
   });
+}
+
+/** 关系类型管理：可改名、删除、新增 */
+export function typeManager(after: () => Promise<void>): void {
+  const listEl = h('div');
+  const errorEl = h('div', { class: 'muted', style: 'color:var(--danger);min-height:18px;margin:8px 0' });
+  const nameInput = h('input', {
+    class: 'input',
+    placeholder: '新类型名称，如：竞赛队友',
+    maxlength: '12',
+  }) as HTMLInputElement;
+
+  function drawList(): void {
+    const data = getData();
+    listEl.innerHTML = '';
+    if (!data.linkTypes.length) {
+      listEl.append(h('div', { class: 'empty', text: '还没有任何关系类型' }));
+      return;
+    }
+    for (const type of data.linkTypes) {
+      const used = data.links.filter((l) => l.type === type).length;
+      const input = h('input', { class: 'input', value: type, maxlength: '12' }) as HTMLInputElement;
+      listEl.append(
+        h(
+          'div',
+          { class: 'rel-item', style: 'display:flex;gap:8px;align-items:center' },
+          input,
+          h('span', { class: 'who', style: 'flex:none;white-space:nowrap', text: `${used} 条` }),
+          h(
+            'button',
+            {
+              class: 'btn btn-sm',
+              onclick: async () => {
+                const next = input.value.trim();
+                if (!next || next === type) return;
+                errorEl.textContent = '';
+                try {
+                  const res = await api.renameLinkType(type, next);
+                  toast(res.updatedLinks ? `已改名，${res.updatedLinks} 条关系跟着更新` : '已改名', 'ok');
+                  await after();
+                  drawList();
+                } catch (err) {
+                  errorEl.textContent = (err as Error).message;
+                }
+              },
+            },
+            '保存',
+          ),
+          h(
+            'button',
+            {
+              class: 'btn btn-sm btn-danger',
+              onclick: async () => {
+                const ok = await confirmDialog(
+                  '删除关系类型',
+                  used
+                    ? `「${type}」还有 ${used} 条关系在用，删除后它们会变成「其他」。确定删除吗？`
+                    : `确定删除「${type}」？`,
+                );
+                if (!ok) return;
+                errorEl.textContent = '';
+                try {
+                  const res = await api.deleteLinkType(type);
+                  toast(
+                    res.updatedLinks ? `已删除，${res.updatedLinks} 条关系改为「${res.fallback}」` : '已删除',
+                    'ok',
+                  );
+                  await after();
+                  drawList();
+                } catch (err) {
+                  errorEl.textContent = (err as Error).message;
+                }
+              },
+            },
+            '删除',
+          ),
+        ),
+      );
+    }
+  }
+
+  const addBtn = h(
+    'button',
+    {
+      class: 'btn btn-primary',
+      onclick: async () => {
+        const name = nameInput.value.trim();
+        if (!name) {
+          errorEl.textContent = '先写个名称';
+          return;
+        }
+        errorEl.textContent = '';
+        try {
+          await api.createLinkType(name);
+          nameInput.value = '';
+          toast('已添加', 'ok');
+          await after();
+          drawList();
+        } catch (err) {
+          errorEl.textContent = (err as Error).message;
+        }
+      },
+    },
+    '添加',
+  );
+
+  openDialog((close) =>
+    h(
+      'div',
+      { class: 'modal' },
+      h('h2', { text: '关系类型' }),
+      h('div', {
+        class: 'muted',
+        style: 'margin-bottom:10px;line-height:1.6',
+        text: '改名字会同步更新已有的关系；删除时，用到它的关系会自动变成「其他」。',
+      }),
+      listEl,
+      errorEl,
+      h('div', { style: 'display:flex;gap:8px' }, nameInput, addBtn),
+      h('div', { class: 'modal-actions' }, h('button', { class: 'btn', onclick: () => close() }, '完成')),
+    ),
+  );
+
+  drawList();
 }
 
 export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): () => void {
@@ -173,7 +296,7 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
     viewState.colorBy === 'role' ? '按角色着色' : '按小组着色',
   );
 
-  const allTypes = Array.from(new Set([...LINK_TYPES, ...data.links.map((l) => l.type)]));
+  const allTypes = Array.from(new Set([...data.linkTypes, ...data.links.map((l) => l.type)]));
   const chips = allTypes.map((type) =>
     h(
       'button',
@@ -215,6 +338,9 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
       ? h('button', { class: 'btn btn-sm btn-primary', onclick: () => personForm(null, refresh) }, '＋ 人物')
       : null,
     data.canEdit ? h('button', { class: 'btn btn-sm', onclick: () => linkForm(refresh) }, '＋ 关系') : null,
+    data.canEdit
+      ? h('button', { class: 'btn btn-sm', onclick: () => typeManager(refresh) }, '⚙ 关系类型')
+      : null,
     h('div', { class: 'spacer' }),
     h('div', { class: 'muted', text: `${data.people.length} 人 · ${data.links.length} 条关系` }),
     h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;width:100%;padding-top:4px' }, ...chips),

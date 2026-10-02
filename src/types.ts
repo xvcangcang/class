@@ -53,13 +53,14 @@ export interface Bootstrap {
   links: PersonLink[];
   events: ClassEvent[];
   users: User[];
+  linkTypes: string[];
   version: string;
   canEdit: boolean;
   isAdmin: boolean;
 }
 
-/** 关系类型的建议选项（前端下拉里用，也可自己填） */
-export const LINK_TYPES = [
+/** 关系类型的默认值：服务端首次运行会写进 link-types.json，之后由使用者自己增删改 */
+export const DEFAULT_LINK_TYPES = [
   '好友',
   '同桌',
   '同宿舍',

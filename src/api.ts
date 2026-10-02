@@ -69,6 +69,20 @@ export const api = {
     request<{ link: PersonLink }>(`/links/${id}`, { method: 'PATCH', body }),
   deleteLink: (id: string) => request<{ ok: boolean }>(`/links/${id}`, { method: 'DELETE' }),
 
+  /* 关系类型（可自定义） */
+  createLinkType: (name: string) =>
+    request<{ linkTypes: string[] }>('/link-types', { method: 'POST', body: { name } }),
+  renameLinkType: (from: string, name: string) =>
+    request<{ linkTypes: string[]; updatedLinks: number }>(`/link-types/${encodeURIComponent(from)}`, {
+      method: 'PATCH',
+      body: { name },
+    }),
+  deleteLinkType: (name: string) =>
+    request<{ linkTypes: string[]; updatedLinks: number; fallback: string }>(
+      `/link-types/${encodeURIComponent(name)}`,
+      { method: 'DELETE' },
+    ),
+
   /* 事件 */
   createEvent: (body: Partial<ClassEvent>) => request<{ event: ClassEvent }>('/events', { method: 'POST', body }),
   updateEvent: (id: string, body: Partial<ClassEvent>) =>
