@@ -6,6 +6,7 @@ import { renderAccounts } from './views/accounts';
 import { renderEvents } from './views/events';
 import { renderGraph } from './views/graph';
 import { renderLogin } from './views/login';
+import { renderLogs } from './views/logs';
 import { renderPeople } from './views/people';
 import './styles/main.css';
 
@@ -15,6 +16,7 @@ const TABS = [
   { id: 'graph', label: '关系图' },
   { id: 'events', label: '班级事件' },
   { id: 'people', label: '人物' },
+  { id: 'logs', label: '操作日志', adminOnly: true },
   { id: 'accounts', label: '账号', adminOnly: true },
 ] as const;
 
@@ -147,6 +149,7 @@ function renderCurrentTab(page: HTMLElement) {
   if (currentTab === 'graph') cleanup = renderGraph(page, refresh);
   else if (currentTab === 'events') cleanup = renderEvents(page, refresh);
   else if (currentTab === 'people') cleanup = renderPeople(page, refresh);
+  else if (currentTab === 'logs') cleanup = renderLogs(page);
   else if (currentTab === 'accounts') cleanup = renderAccounts(page, refresh);
 }
 

@@ -25,6 +25,7 @@ import {
   ROLE_DESC,
   ROLE_LABELS,
   ROLES,
+  appendLog,
   canEdit,
   createSession,
   destroySession,
@@ -33,6 +34,7 @@ import {
   getGroups,
   getLinkTypes,
   getLinks,
+  getLogs,
   getPeople,
   getSessionUser,
   getUsers,
@@ -85,6 +87,59 @@ const bearer = (req) => {
   return header.startsWith('Bearer ') ? header.slice(7).trim() : '';
 };
 const currentUser = (req) => getSessionUser(bearer(req));
+
+/* ------------------------------------------------------------------ *
+ * 操作日志
+ *
+ * 每一次「改动数据」的操作都会追加一条日志：谁 / 什么时候 / 对什么 / 做了什么。
+ * 日志只增不删，界面里也没有删除入口 —— 这样才谈得上留痕、可溯源。
+ * 参数的含义：
+ *   action  做了什么（短词，用于筛选与配色），如「新增人物」
+ *   target  对什么做的（人名 / 群组名 / 关系两端 / 账号名）
+ *   detail  补充说明（改动了哪些字段、连带影响了多少条数据）
+ *   ok      成功还是失败
+ * ------------------------------------------------------------------ */
+function logAction(req, { action, target = '', detail = '', ok = true }) {
+  try {
+    const user = req.user ?? null;
+    const ip =
+      String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() ||
+      req.socket?.remoteAddress ||
+      '';
+    appendLog({
+      id: randomUUID(),
+      ts: Date.now(),
+      action,
+      target,
+      detail,
+      ok,
+      actor: user ? user.displayName || user.username : '未登录用户',
+      actorUsername: user?.username ?? '',
+      actorId: user?.id ?? null,
+      ip,
+    });
+  } catch (err) {
+    // 记日志失败绝不能影响正常业务
+    console.error('写操作日志失败：', err);
+  }
+}
+
+/** 把 id 列表换成「张三、李四」这种看得懂的名字 */
+const namesOf = (ids) =>
+  asArray(ids)
+    .map((id) => findPerson(id)?.name ?? '（已删除）')
+    .join('、');
+
+/** 对比前后对象，列出被改动的字段（用于日志的「改了什么」） */
+function changedFields(before, after, labels) {
+  const changed = [];
+  for (const [key, label] of Object.entries(labels)) {
+    const a = JSON.stringify(before?.[key] ?? null);
+    const b = JSON.stringify(after?.[key] ?? null);
+    if (a !== b) changed.push(label);
+  }
+  return changed;
+}
 
 /** 组装前端一次拉取所需的全部数据（按当前用户权限裁剪） */
 function buildBootstrap(user) {
@@ -153,9 +208,17 @@ app.post('/api/auth/login', (req, res) => {
   const password = String(req.body?.password ?? '');
   const found = getUsers().find((u) => u.username === username);
   if (!found || !verifyPassword(password, found.password)) {
+    logAction(req, {
+      action: '登录失败',
+      target: username || '（没填用户名）',
+      detail: found ? '密码不对' : '没有这个账号',
+      ok: false,
+    });
     res.status(401).json({ error: '用户名或密码不对' });
     return;
   }
+  req.user = found;
+  logAction(req, { action: '登录', target: found.username, detail: `以「${ROLE_LABELS[found.role] ?? found.role}」身份登录` });
   res.json({ token: createSession(found.id), user: publicUser(found) });
 });
 
@@ -165,6 +228,7 @@ app.post('/api/auth/login', (req, res) => {
 app.get('/api/auth/me', auth, (req, res) => res.json({ user: publicUser(req.user) }));
 
 app.post('/api/auth/logout', auth, (req, res) => {
+  logAction(req, { action: '退出登录', target: req.user.username });
   destroySession(bearer(req));
   res.json({ ok: true });
 });
@@ -184,6 +248,7 @@ app.post('/api/auth/password', auth, (req, res) => {
   const target = users.find((u) => u.id === req.user.id);
   target.password = hashPassword(newPassword);
   saveUsers(users);
+  logAction(req, { action: '修改密码', target: req.user.username, detail: '修改了自己的登录密码' });
   res.json({ ok: true });
 });
 
@@ -287,6 +352,7 @@ app.post('/api/groups', auth, editorOnly, (req, res) => {
   };
   groups.push(group);
   saveGroups(groups);
+  logAction(req, { action: '新建群组', target: group.name, detail: `类型：${group.kind}` });
   res.json({ group });
 });
 
@@ -298,6 +364,7 @@ app.patch('/api/groups/:id', auth, editorOnly, (req, res) => {
     return;
   }
   const body = req.body ?? {};
+  const before = { ...group };
   if ('name' in body && str(body.name)) {
     const name = str(body.name);
     if (groups.some((g) => g.name === name && g.id !== group.id)) {
@@ -309,6 +376,12 @@ app.patch('/api/groups/:id', auth, editorOnly, (req, res) => {
   if ('kind' in body && GROUP_KINDS.includes(body.kind)) group.kind = body.kind;
   if ('note' in body) group.note = str(body.note);
   saveGroups(groups);
+  const fields = changedFields(before, group, { name: '名称', kind: '类型', note: '备注' });
+  logAction(req, {
+    action: '修改群组',
+    target: group.name,
+    detail: fields.length ? `改动：${fields.join('、')}` : '没有实际改动',
+  });
   res.json({ group });
 });
 
@@ -332,6 +405,12 @@ app.delete('/api/groups/:id', auth, editorOnly, (req, res) => {
     }
   }
   if (changed) savePeople(people);
+
+  logAction(req, {
+    action: '删除群组',
+    target: removed.name,
+    detail: changed ? `连带把 ${changed} 个人的归属移除了` : '组里当时没有人',
+  });
 
   res.json({ ok: true, removedMembers: changed });
 });
@@ -363,6 +442,11 @@ app.post('/api/groups/:id/members', auth, editorOnly, (req, res) => {
     savePeople(people);
     syncGroupMemberLinks(group.id);
   }
+  logAction(req, {
+    action: remove ? '移出群组成员' : '加入群组成员',
+    target: group.name,
+    detail: changed ? `${changed} 人：${namesOf(personIds)}` : '没有变化（这些人本来就在/不在组里）',
+  });
   res.json({ ok: true, changed });
 });
 
@@ -391,6 +475,11 @@ app.post('/api/groups/:id/generate-links', auth, editorOnly, (req, res) => {
       }
     }
     if (removed) saveLinks(links);
+    logAction(req, {
+      action: '清除同组关系',
+      target: group.name,
+      detail: `清掉 ${removed} 条「${typeName}」关系`,
+    });
     res.json({ ok: true, type: typeName, pairs: 0, created: 0, removed });
     return;
   }
@@ -400,6 +489,11 @@ app.post('/api/groups/:id/generate-links', auth, editorOnly, (req, res) => {
   if (!types.includes(typeName)) saveLinkTypes([...types, typeName]);
 
   const result = syncGroupMemberLinks(group.id, true);
+  logAction(req, {
+    action: '生成同组关系',
+    target: group.name,
+    detail: `${members.length} 名成员之间新增 ${result.created} 条「${typeName}」${result.removed ? `，清理 ${result.removed} 条残留` : ''}`,
+  });
   res.json({
     ok: true,
     type: typeName,
@@ -430,6 +524,11 @@ app.post('/api/people', auth, editorOnly, (req, res) => {
   };
   people.push(person);
   savePeople(people);
+  logAction(req, {
+    action: '新增人物',
+    target: person.name,
+    detail: `${person.role === 'teacher' ? '老师' : '学生'}${person.groupIds.length ? `，加入 ${person.groupIds.length} 个群组` : ''}`,
+  });
   res.json({ person });
 });
 
@@ -442,6 +541,7 @@ app.patch('/api/people/:id', auth, editorOnly, (req, res) => {
   }
   const body = req.body ?? {};
   const beforeGroups = [...(person.groupIds ?? [])];
+  const before = { ...person, groupIds: [...beforeGroups], tags: [...(person.tags ?? [])] };
   if ('name' in body && str(body.name)) person.name = str(body.name);
   if ('role' in body) person.role = body.role === 'teacher' ? 'teacher' : 'student';
   if ('groupIds' in body) person.groupIds = cleanGroupIds(body.groupIds);
@@ -454,6 +554,19 @@ app.patch('/api/people/:id', auth, editorOnly, (req, res) => {
     syncGroupMemberLinks(gid);
   }
 
+  const fields = changedFields(before, person, {
+    name: '姓名',
+    role: '身份',
+    groupIds: '所属群组',
+    tags: '标签',
+    note: '备注',
+  });
+  logAction(req, {
+    action: '修改人物',
+    target: person.name,
+    detail: fields.length ? `改动：${fields.join('、')}` : '没有实际改动',
+  });
+
   res.json({ person });
 });
 
@@ -465,16 +578,23 @@ app.delete('/api/people/:id', auth, editorOnly, (req, res) => {
     res.status(404).json({ error: '找不到这个人' });
     return;
   }
-  people.splice(index, 1);
+  const [removed] = people.splice(index, 1);
   savePeople(people);
   // 连带清掉这个人参与的关系与事件引用
-  saveLinks(getLinks().filter((l) => l.source !== id && l.target !== id));
+  const links = getLinks();
+  const keptLinks = links.filter((l) => l.source !== id && l.target !== id);
+  saveLinks(keptLinks);
   saveEvents(
     getEvents().map((event) => ({
       ...event,
       participants: asArray(event.participants).filter((p) => p !== id),
     })),
   );
+  logAction(req, {
+    action: '删除人物',
+    target: removed?.name ?? '（未知）',
+    detail: `同时清掉 ${links.length - keptLinks.length} 条相关关系`,
+  });
   res.json({ ok: true });
 });
 
@@ -504,6 +624,7 @@ app.post('/api/link-types', auth, editorOnly, (req, res) => {
   }
   types.push(name);
   saveLinkTypes(types);
+  logAction(req, { action: '新增关系类型', target: name });
   res.json({ linkTypes: types });
 });
 
@@ -542,6 +663,12 @@ app.patch('/api/link-types/:name', auth, editorOnly, (req, res) => {
   }
   if (changed) saveLinks(links);
 
+  logAction(req, {
+    action: '重命名关系类型',
+    target: `${from} → ${to}`,
+    detail: changed ? `同步更新了 ${changed} 条关系` : '当时没有关系用到它',
+  });
+
   res.json({ linkTypes: types, updatedLinks: changed });
 });
 
@@ -572,6 +699,12 @@ app.delete('/api/link-types/:name', auth, editorOnly, (req, res) => {
   }
   if (changed) saveLinks(links);
 
+  logAction(req, {
+    action: '删除关系类型',
+    target: name,
+    detail: changed ? `${changed} 条关系改为「${fallback}」` : `没有关系用到它（回落类型：${fallback}）`,
+  });
+
   res.json({ linkTypes: types, updatedLinks: changed, fallback });
 });
 
@@ -599,6 +732,11 @@ app.post('/api/links', auth, editorOnly, (req, res) => {
   };
   links.push(link);
   saveLinks(links);
+  logAction(req, {
+    action: '新增关系',
+    target: `${findPerson(source)?.name ?? '？'} ↔ ${findPerson(target)?.name ?? '？'}`,
+    detail: `类型：${link.type}，亲密度 ${link.weight}`,
+  });
   res.json({ link });
 });
 
@@ -610,11 +748,18 @@ app.patch('/api/links/:id', auth, editorOnly, (req, res) => {
     return;
   }
   const body = req.body ?? {};
+  const before = { ...link };
   if ('type' in body) link.type = str(body.type) || link.type;
   if ('weight' in body) link.weight = Math.min(5, Math.max(1, Number(body.weight) || link.weight));
   if ('source' in body && findPerson(str(body.source))) link.source = str(body.source);
   if ('target' in body && findPerson(str(body.target))) link.target = str(body.target);
   saveLinks(links);
+  const fields = changedFields(before, link, { type: '类型', weight: '亲密度', source: '起点', target: '终点' });
+  logAction(req, {
+    action: '修改关系',
+    target: `${findPerson(link.source)?.name ?? '？'} ↔ ${findPerson(link.target)?.name ?? '？'}`,
+    detail: fields.length ? `改动：${fields.join('、')}` : '没有实际改动',
+  });
   res.json({ link });
 });
 
@@ -625,8 +770,13 @@ app.delete('/api/links/:id', auth, editorOnly, (req, res) => {
     res.status(404).json({ error: '找不到这条关系' });
     return;
   }
-  links.splice(index, 1);
+  const [removed] = links.splice(index, 1);
   saveLinks(links);
+  logAction(req, {
+    action: '删除关系',
+    target: `${findPerson(removed?.source)?.name ?? '？'} ↔ ${findPerson(removed?.target)?.name ?? '？'}`,
+    detail: removed ? `类型：${removed.type}` : '',
+  });
   res.json({ ok: true });
 });
 
@@ -651,6 +801,11 @@ app.post('/api/events', auth, editorOnly, (req, res) => {
   };
   events.push(event);
   saveEvents(events);
+  logAction(req, {
+    action: '新增事件',
+    target: event.title,
+    detail: `${event.date}${event.participants.length ? `，涉及 ${namesOf(event.participants)}` : ''}`,
+  });
   res.json({ event });
 });
 
@@ -662,6 +817,7 @@ app.patch('/api/events/:id', auth, editorOnly, (req, res) => {
     return;
   }
   const body = req.body ?? {};
+  const before = { ...event };
   if ('date' in body) event.date = str(body.date) || event.date;
   if ('title' in body && str(body.title)) event.title = str(body.title);
   if ('detail' in body) event.detail = str(body.detail);
@@ -670,6 +826,12 @@ app.patch('/api/events/:id', auth, editorOnly, (req, res) => {
   }
   event.updatedAt = Date.now();
   saveEvents(events);
+  const fields = changedFields(before, event, { date: '日期', title: '标题', detail: '细节', participants: '参与人' });
+  logAction(req, {
+    action: '修改事件',
+    target: event.title,
+    detail: fields.length ? `改动：${fields.join('、')}` : '没有实际改动',
+  });
   res.json({ event });
 });
 
@@ -680,8 +842,13 @@ app.delete('/api/events/:id', auth, editorOnly, (req, res) => {
     res.status(404).json({ error: '找不到这个事件' });
     return;
   }
-  events.splice(index, 1);
+  const [removed] = events.splice(index, 1);
   saveEvents(events);
+  logAction(req, {
+    action: '删除事件',
+    target: removed?.title ?? '（未知）',
+    detail: removed ? `日期：${removed.date}` : '',
+  });
   res.json({ ok: true });
 });
 
@@ -716,6 +883,11 @@ app.post('/api/users', auth, adminOnly, (req, res) => {
   };
   users.push(created);
   saveUsers(users);
+  logAction(req, {
+    action: '新建账号',
+    target: created.username,
+    detail: `权限：${ROLE_LABELS[created.role] ?? created.role}，显示名：${created.displayName}`,
+  });
   res.json({ user: publicUser(created) });
 });
 
@@ -727,6 +899,7 @@ app.patch('/api/users/:id', auth, adminOnly, (req, res) => {
     return;
   }
   const body = req.body ?? {};
+  const before = { ...target };
   if ('role' in body && ROLES.includes(body.role)) {
     if (target.id === req.user.id && body.role !== 'admin') {
       res.status(400).json({ error: '不能把自己降级，免得没人能管了' });
@@ -744,6 +917,17 @@ app.patch('/api/users/:id', auth, adminOnly, (req, res) => {
     target.password = hashPassword(String(body.password));
   }
   saveUsers(users);
+  const fields = changedFields(before, target, {
+    role: '权限等级',
+    displayName: '显示名',
+    personId: '关联人物',
+    password: '密码',
+  });
+  logAction(req, {
+    action: '修改账号',
+    target: target.username,
+    detail: fields.length ? `改动：${fields.join('、')}` : '没有实际改动',
+  });
   res.json({ user: publicUser(target) });
 });
 
@@ -758,9 +942,49 @@ app.delete('/api/users/:id', auth, adminOnly, (req, res) => {
     res.status(400).json({ error: '不能删掉自己' });
     return;
   }
-  users.splice(index, 1);
+  const [removed] = users.splice(index, 1);
   saveUsers(users);
+  logAction(req, {
+    action: '删除账号',
+    target: removed.username,
+    detail: `原权限：${ROLE_LABELS[removed.role] ?? removed.role}`,
+  });
   res.json({ ok: true });
+});
+
+/* ------------------------------------------------------------------ *
+ * 操作日志查询（仅管理员可看，因为里面会涉及账号操作）
+ * ------------------------------------------------------------------ */
+app.get('/api/logs', auth, adminOnly, (req, res) => {
+  const all = getLogs();
+  const q = str(req.query?.q).toLowerCase();
+  const action = str(req.query?.action);
+  const result = str(req.query?.result); // '' | 'ok' | 'fail'
+  const from = Number(req.query?.from) || 0;
+  const to = Number(req.query?.to) || 0;
+  const limit = Math.min(1000, Math.max(1, Number(req.query?.limit) || 200));
+
+  const filtered = all
+    .filter((entry) => {
+      if (action && entry.action !== action) return false;
+      if (result === 'ok' && entry.ok === false) return false;
+      if (result === 'fail' && entry.ok !== false) return false;
+      if (from && entry.ts < from) return false;
+      if (to && entry.ts > to) return false;
+      if (q) {
+        const haystack = `${entry.actor} ${entry.actorUsername} ${entry.action} ${entry.target} ${entry.detail}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => b.ts - a.ts);
+
+  res.json({
+    logs: filtered.slice(0, limit),
+    total: filtered.length,
+    stored: all.length,
+    actions: [...new Set(all.map((entry) => entry.action))].sort(),
+  });
 });
 
 /* ------------------------------------------------------------------ *

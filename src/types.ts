@@ -68,6 +68,38 @@ export interface RoleInfo {
   desc: string;
 }
 
+/** 一条操作日志：谁 / 什么时候 / 对什么 / 做了什么 */
+export interface LogEntry {
+  id: string;
+  /** 发生时间（毫秒时间戳） */
+  ts: number;
+  /** 做了什么，如「新增人物」「删除关系」 */
+  action: string;
+  /** 对什么做的（人名 / 群组名 / 关系两端 / 账号名） */
+  target: string;
+  /** 补充说明（改了哪些字段、连带影响多少条数据） */
+  detail: string;
+  /** 成功还是失败 */
+  ok: boolean;
+  /** 操作人显示名 */
+  actor: string;
+  /** 操作人登录名 */
+  actorUsername: string;
+  actorId: string | null;
+  /** 来源 IP，仅在导出时查看 */
+  ip: string;
+}
+
+export interface LogQueryResult {
+  logs: LogEntry[];
+  /** 符合筛选条件的总条数 */
+  total: number;
+  /** 服务器上总共存了多少条 */
+  stored: number;
+  /** 出现过的动作种类（用于下拉筛选） */
+  actions: string[];
+}
+
 export interface Bootstrap {
   me: User;
   roles: RoleInfo[];

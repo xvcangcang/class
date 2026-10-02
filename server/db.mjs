@@ -25,7 +25,11 @@ const FILES = {
   events: 'events.json',
   linkTypes: 'link-types.json',
   sessions: 'sessions.json',
+  logs: 'logs.json',
 };
+
+/** 操作日志最多保留多少条（再多就丢掉最旧的，避免文件无限膨胀） */
+export const MAX_LOG_ENTRIES = 5000;
 
 /** 关系类型的默认值，只在首次运行时写入，之后由使用者在界面上自己维护 */
 export const DEFAULT_LINK_TYPES = [
@@ -148,6 +152,28 @@ export const getLinkTypes = () => {
 };
 export const saveLinkTypes = (list) => writeJson('linkTypes', list);
 
+/* ------------------------------------------------------------------ *
+ * 操作日志（留痕 / 可溯源）
+ *
+ * 设计原则：只往后追加，界面不提供删除入口；每条记下「谁、什么时候、
+ * 对什么、做了什么」，方便事后核对是谁改了哪条数据。
+ * ------------------------------------------------------------------ */
+export const getLogs = () => {
+  const list = readJson('logs', []);
+  return Array.isArray(list) ? list : [];
+};
+
+export const saveLogs = (list) => writeJson('logs', list);
+
+/** 追加一条日志（自动裁掉过老的记录） */
+export function appendLog(entry) {
+  const logs = getLogs();
+  logs.push(entry);
+  const trimmed = logs.length > MAX_LOG_ENTRIES ? logs.slice(logs.length - MAX_LOG_ENTRIES) : logs;
+  saveLogs(trimmed);
+  return entry;
+}
+
 /** 对外输出用户信息时抹掉密码哈希 */
 export function publicUser(user) {
   if (!user) return null;
@@ -185,6 +211,7 @@ export function ensureSeed() {
   if (!existsSync(fileOf('links'))) writeJson('links', []);
   if (!existsSync(fileOf('events'))) writeJson('events', []);
   if (!existsSync(fileOf('linkTypes'))) writeJson('linkTypes', DEFAULT_LINK_TYPES);
+  if (!existsSync(fileOf('logs'))) writeJson('logs', []);
 
   clearLegacyDemoData();
   migratePersonGroups();

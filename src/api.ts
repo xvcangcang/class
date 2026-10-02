@@ -1,5 +1,5 @@
 /** 与后端 /api/* 的通信封装 */
-import type { Bootstrap, ClassEvent, Group, Person, PersonLink, User } from './types';
+import type { Bootstrap, ClassEvent, Group, LogQueryResult, Person, PersonLink, User } from './types';
 
 const TOKEN_KEY = 'class-atlas-token';
 
@@ -111,4 +111,15 @@ export const api = {
   updateUser: (id: string, body: Record<string, unknown>) =>
     request<{ user: User }>(`/users/${id}`, { method: 'PATCH', body }),
   deleteUser: (id: string) => request<{ ok: boolean }>(`/users/${id}`, { method: 'DELETE' }),
+
+  /* 操作日志（仅管理员） */
+  listLogs: (params: { q?: string; action?: string; result?: string; limit?: number } = {}) => {
+    const search = new URLSearchParams();
+    if (params.q) search.set('q', params.q);
+    if (params.action) search.set('action', params.action);
+    if (params.result) search.set('result', params.result);
+    if (params.limit) search.set('limit', String(params.limit));
+    const qs = search.toString();
+    return request<LogQueryResult>(`/logs${qs ? `?${qs}` : ''}`);
+  },
 };

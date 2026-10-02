@@ -714,3 +714,93 @@ tr:hover td {
     padding: 14px 12px 32px;
   }
 }
+
+/* ---------------- 操作日志 ---------------- */
+.log-intro {
+  margin-bottom: 14px;
+  border-left: 3px solid var(--accent);
+}
+.log-intro > div {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.log-day {
+  margin: 12px 0 2px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+}
+.log-day:first-child {
+  margin-top: 0;
+}
+.log-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 9px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+}
+.log-row-fail {
+  border-color: rgba(248, 113, 113, 0.5);
+  background: rgba(248, 113, 113, 0.08);
+}
+.log-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  min-width: 64px;
+}
+.log-actor {
+  font-weight: 600;
+  min-width: 56px;
+}
+.log-target {
+  color: var(--text);
+}
+.log-target::before {
+  content: '· ';
+  color: var(--muted);
+}
+.log-detail {
+  color: var(--muted);
+  font-size: 12px;
+}
+.pill {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.pill-ok {
+  color: var(--ok);
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.12);
+}
+.pill-danger {
+  color: var(--danger);
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.12);
+}
+.pill-warn {
+  color: var(--warn);
+  border-color: rgba(251, 191, 36, 0.4);
+  background: rgba(251, 191, 36, 0.12);
+}
+.pill-info {
+  color: var(--accent);
+  border-color: rgba(56, 189, 248, 0.4);
+  background: rgba(56, 189, 248, 0.12);
+}
