@@ -1209,7 +1209,24 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
   });
   chart.on('dblclick', () => select(null));
 
-  const onResize = () => chart.resize();
+  /**
+   * 手机上按实际可用空间给图设高度 —— 比 CSS 里估算的 calc(100dvh - Xpx) 准，
+   * 否则图可能比屏幕还高，整个界面看起来就像"被裁掉了"。
+   */
+  function fitChartHeight(): void {
+    if (window.innerWidth > 640) {
+      chartEl.style.height = '';
+      return;
+    }
+    const top = chartEl.getBoundingClientRect().top;
+    const available = window.innerHeight - top - 14;
+    chartEl.style.height = `${Math.max(260, Math.round(available))}px`;
+  }
+
+  const onResize = () => {
+    fitChartHeight();
+    chart.resize();
+  };
   window.addEventListener('resize', onResize);
   window.addEventListener('orientationchange', onResize);
   // 手机上地址栏收起/展开会改变可视高度，用 ResizeObserver 跟着调
@@ -1218,7 +1235,10 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
     resizeObserver = new ResizeObserver(() => chart.resize());
     resizeObserver.observe(chartEl);
   }
-  requestAnimationFrame(() => chart.resize());
+  requestAnimationFrame(() => {
+    fitChartHeight();
+    chart.resize();
+  });
 
   render();
 

@@ -725,22 +725,20 @@ tr:hover td {
 
   html,
   body {
-    height: 100%;
+    /* 不要写死 height:100%，内容超出时容易看起来像被裁掉 */
     overflow-x: hidden;
   }
-
   #app {
     min-height: 100dvh;
   }
-
-  /* ---- 顶栏：一行放得下，不换行 ---- */
+  /* ---- 顶栏：折成两行 —— 第一行品牌+账号操作，第二行标签（可横滑） ---- */
   .topbar {
-    flex-wrap: nowrap;
-    gap: 8px;
-    padding: 8px 10px;
+    flex-wrap: wrap;
+    gap: 6px;
+    row-gap: 2px;
+    padding: 6px 10px;
     align-items: center;
   }
-
   .brand {
     font-size: 14px;
     gap: 6px;
@@ -757,15 +755,15 @@ tr:hover td {
     height: 9px;
   }
 
-  /* ---- 标签：横向可滑，不再折行 ---- */
+  /* ---- 标签：独占一行、横向可滑 ---- */
   .tabs {
-    flex: 1 1 auto;
+    order: 3;
+    width: 100%;
     flex-wrap: nowrap;
     overflow-x: auto;
     gap: 2px;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
-    min-width: 0;
   }
 
   .tabs::-webkit-scrollbar {
@@ -779,10 +777,11 @@ tr:hover td {
     flex: none;
   }
 
-  /* ---- 用户区：只留必要信息 ---- */
+  /* ---- 用户区：只留必要信息，靠右 ---- */
   .userbox {
     gap: 6px;
     flex: none;
+    margin-left: auto;
     font-size: 12px;
   }
 
