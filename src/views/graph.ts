@@ -14,6 +14,13 @@ const viewState = {
   selected: null as string | null,
 };
 
+/**
+ * 记住每个节点上一次的位置。
+ * 力导向布局每次 setOption 都会重新算位置，重建时用这些坐标当起点，
+ * 整张图就不会"乱抖"了（点节点、切标签、搜索都受影响）。
+ */
+const posCache = new Map<string, { x: number; y: number }>();
+
 function personOptions(people: Person[]) {
   return [...people]
     .sort((a, b) => a.role.localeCompare(b.role) || a.name.localeCompare(b.name))
@@ -596,6 +603,7 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
     viewState.colorBy === 'role' ? ['学生', '老师'] : Array.from(new Set(data.people.map(categoryOf)));
 
   /* ---------- DOM ---------- */
+  let searchTimer = 0;
   const chartEl = h('div', { id: 'chart' });
   const sideEl = h('div', { class: 'side' });
 
@@ -619,7 +627,9 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
     style: 'max-width:170px',
     oninput: (event: Event) => {
       viewState.keyword = (event.target as HTMLInputElement).value.trim();
-      applyOption();
+      // 防抖：别每敲一个字就重建一次图
+      window.clearTimeout(searchTimer);
+      searchTimer = window.setTimeout(() => applyOption(), 250);
     },
   }) as HTMLInputElement;
 
@@ -671,6 +681,7 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
           viewState.selected = null;
           keywordInput.value = '';
           chips.forEach((c) => c.classList.add('active'));
+          posCache.clear(); // 一并回到初始布局
           render();
         },
       },
@@ -722,6 +733,8 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
   function resetZoom(): void {
     chart.setOption({ series: [{ zoom: 1 }] } as any);
     setZoomLabel(1);
+    // 这个按钮的语义是"真正重新布局一次"，所以把位置记忆清掉
+    posCache.clear();
     applyOption();
   }
 
@@ -763,6 +776,7 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
 
     const personNodes = data.people.map((p) => {
       const deg = degree.get(p.id) ?? 0;
+      const cached = posCache.get(p.id);
       let opacity = 1;
       if (keyword) opacity = matched.includes(p.id) ? 1 : 0.15;
       else if (viewState.hiddenTypes.size > 0 && !linkedIds.has(p.id)) opacity = 0.15;
@@ -772,6 +786,8 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
         name: p.name,
         category: Math.max(0, categoryList.indexOf(categoryOf(p))),
         symbolSize: Math.min(46, 15 + deg * 3.2),
+        // 沿用上次的位置，避免重建时整张图重排
+        ...(cached ? { x: cached.x, y: cached.y } : {}),
         itemStyle: {
           color: categoryColors[categoryOf(p)],
           borderColor: p.role === 'teacher' ? '#f59e0b' : '#0b1220',
@@ -786,10 +802,12 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
     const groupNodes = data.groups.map((group) => {
       const members = data.people.filter((p) => (p.groupIds ?? []).includes(group.id));
       const dim = keyword ? !group.name.includes(keyword) : !showMembers;
+      const cached = posCache.get(groupNodeId(group.id));
       return {
         id: groupNodeId(group.id),
         name: group.name,
         symbol: 'rect',
+        ...(cached ? { x: cached.x, y: cached.y } : {}),
         symbolSize: [Math.max(54, group.name.length * 12 + 22), 28],
         itemStyle: {
           color: GROUP_KIND_COLORS[group.kind] ?? '#94a3b8',
@@ -804,6 +822,8 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
     });
 
     const nodes = [...personNodes, ...groupNodes];
+    // 只要有历史位置，就让力导向从原位开始，而不是重新排布
+    const anyPositioned = nodes.some((n: any) => typeof n.x === 'number' && typeof n.y === 'number');
 
     /* 人—人关系：同一对人有多条时，用不同弧度错开 */
     const pairSeq = new Map<string, number>();
@@ -891,6 +911,8 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
             edgeLength: [110, 260],
             gravity: 0.05,
             friction: 0.85,
+            // 有历史位置时不重新初始化布局
+            ...(anyPositioned ? { initLayout: 'none' as const } : {}),
           },
           emphasis: { focus: 'adjacency', lineStyle: { width: 3, opacity: 0.9 } },
           label: { show: true, position: 'right', color: '#dbe7f7', fontSize: 11 },
@@ -900,6 +922,26 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
       ],
     };
     chart.setOption(option as any, true);
+    rememberPositions();
+  }
+
+  /** 布局稳定后把节点坐标存起来，下次重建直接从原位开始，避免整张图乱跳 */
+  function rememberPositions() {
+    window.setTimeout(() => {
+      try {
+        const series = (chart as any).getModel?.()?.getSeriesByIndex?.(0);
+        const list = series?.getData?.();
+        if (!list) return;
+        for (let i = 0; i < list.count(); i += 1) {
+          const el = list.getItemGraphicEl(i);
+          if (el && typeof el.x === 'number' && typeof el.y === 'number') {
+            posCache.set(String(list.getId(i)), { x: el.x, y: el.y });
+          }
+        }
+      } catch {
+        /* 拿不到就算了，不影响使用 */
+      }
+    }, 400);
   }
 
   /* ---------- 侧栏 ---------- */
@@ -1129,10 +1171,26 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
 
   function select(id: string | null) {
     viewState.selected = id;
-    applyOption();
+    // 只切换高亮，不重建图 —— 重建会触发力导向重新布局，看起来就是"乱抖"
+    updateHighlight();
     renderSide();
-    if (id) {
-      chart.dispatchAction({ type: 'highlight', seriesIndex: 0, dataIndex: data.people.findIndex((p) => p.id === id) });
+  }
+
+  /** 用 ECharts 自己的高亮动作，配合 emphasis.focus='adjacency' 实现选中效果 */
+  function updateHighlight(): void {
+    chart.dispatchAction({ type: 'downplay', seriesIndex: 0 });
+    if (!viewState.selected) return;
+
+    let dataIndex = -1;
+    if (isGroupNode(viewState.selected)) {
+      const gid = viewState.selected.slice(GROUP_PREFIX.length);
+      const groupIndex = data.groups.findIndex((g) => g.id === gid);
+      if (groupIndex >= 0) dataIndex = data.people.length + groupIndex;
+    } else {
+      dataIndex = data.people.findIndex((p) => p.id === viewState.selected);
+    }
+    if (dataIndex >= 0) {
+      chart.dispatchAction({ type: 'highlight', seriesIndex: 0, dataIndex });
     }
   }
 
@@ -1140,6 +1198,7 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
     applyOption();
     renderSide();
     setZoomLabel(currentZoom());
+    updateHighlight();
   }
 
   chart.on('click', (params: any) => {
