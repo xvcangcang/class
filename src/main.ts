@@ -110,35 +110,51 @@ function renderShell() {
       { class: 'userbox' },
       h('span', { class: 'user-name', text: data.me.displayName }),
       h('span', { class: `role-badge role-${data.me.role}`, text: roleInfo?.label ?? data.me.role }),
-      data.isAdmin
-        ? h(
-            'button',
-            {
-              class: `btn btn-sm ${data.incognito ? 'btn-warn' : ''}`,
-              title: '开启后，你的操作不会被写入操作日志（开关本身仍会留痕）',
-              onclick: () => toggleIncognito(data.incognito),
-            },
-            data.incognito ? '无痕中 · 点此关闭' : '无痕模式',
-          )
-        : null,
-      h('button', { class: 'btn btn-sm', onclick: () => openChangePassword() }, '改密码'),
-      h('button', { class: 'btn btn-sm btn-danger', onclick: () => openDeactivate() }, '注销账号'),
+      // 手机上把下面这些操作收进「⋯」，给平台标题和身份让出位置
       h(
         'button',
         {
-          class: 'btn btn-sm',
-          onclick: async () => {
-            try {
-              await api.logout();
-            } catch {
-              /* 忽略：就算失败也照常退出本地 */
-            }
-            setToken(null);
-            clearData();
-            showLogin();
+          class: 'btn btn-sm user-menu-toggle',
+          title: '账号操作',
+          onclick: (event: Event) => {
+            (event.currentTarget as HTMLElement).closest('.userbox')?.classList.toggle('expanded');
           },
         },
-        '退出',
+        '⋯',
+      ),
+      h(
+        'div',
+        { class: 'user-actions' },
+        data.isAdmin
+          ? h(
+              'button',
+              {
+                class: `btn btn-sm ${data.incognito ? 'btn-warn' : ''}`,
+                title: '开启后，你的操作不会被写入操作日志（开关本身仍会留痕）',
+                onclick: () => toggleIncognito(data.incognito),
+              },
+              data.incognito ? '无痕中 · 点此关闭' : '无痕模式',
+            )
+          : null,
+        h('button', { class: 'btn btn-sm', onclick: () => openChangePassword() }, '改密码'),
+        h('button', { class: 'btn btn-sm btn-danger', onclick: () => openDeactivate() }, '注销账号'),
+        h(
+          'button',
+          {
+            class: 'btn btn-sm',
+            onclick: async () => {
+              try {
+                await api.logout();
+              } catch {
+                /* 忽略：就算失败也照常退出本地 */
+              }
+              setToken(null);
+              clearData();
+              showLogin();
+            },
+          },
+          '退出',
+        ),
       ),
     ),
   );
