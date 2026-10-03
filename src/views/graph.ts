@@ -21,6 +21,9 @@ const viewState = {
  */
 const posCache = new Map<string, { x: number; y: number }>();
 
+/** 人物节点统一大小 —— 不再随关系数量变化，避免大小差异让图看起来更乱 */
+const NODE_SIZE = 24;
+
 function personOptions(people: Person[]) {
   return [...people]
     .sort((a, b) => a.role.localeCompare(b.role) || a.name.localeCompare(b.name))
@@ -775,7 +778,6 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
     for (const name of categoryList) categoryColors[name] = colorOfStatic(name);
 
     const personNodes = data.people.map((p) => {
-      const deg = degree.get(p.id) ?? 0;
       const cached = posCache.get(p.id);
       let opacity = 1;
       if (keyword) opacity = matched.includes(p.id) ? 1 : 0.15;
@@ -785,7 +787,7 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
         id: p.id,
         name: p.name,
         category: Math.max(0, categoryList.indexOf(categoryOf(p))),
-        symbolSize: Math.min(46, 15 + deg * 3.2),
+        symbolSize: NODE_SIZE,
         // 沿用上次的位置，避免重建时整张图重排
         ...(cached ? { x: cached.x, y: cached.y } : {}),
         itemStyle: {
