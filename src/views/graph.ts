@@ -1211,12 +1211,21 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
 
   const onResize = () => chart.resize();
   window.addEventListener('resize', onResize);
+  window.addEventListener('orientationchange', onResize);
+  // 手机上地址栏收起/展开会改变可视高度，用 ResizeObserver 跟着调
+  let resizeObserver: ResizeObserver | null = null;
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => chart.resize());
+    resizeObserver.observe(chartEl);
+  }
   requestAnimationFrame(() => chart.resize());
 
   render();
 
   return () => {
     window.removeEventListener('resize', onResize);
+    window.removeEventListener('orientationchange', onResize);
+    resizeObserver?.disconnect();
     chart.dispose();
   };
 }

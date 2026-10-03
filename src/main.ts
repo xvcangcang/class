@@ -98,12 +98,17 @@ function renderShell() {
   const topbar = h(
     'div',
     { class: 'topbar' },
-    h('div', { class: 'brand' }, h('span', { class: 'dot' }), 'Class Analysis Platform'),
+    h(
+      'div',
+      { class: 'brand' },
+      h('span', { class: 'dot' }),
+      h('span', { class: 'brand-text', text: 'Class Analysis Platform' }),
+    ),
     tabsEl,
     h(
       'div',
       { class: 'userbox' },
-      h('span', { text: data.me.displayName }),
+      h('span', { class: 'user-name', text: data.me.displayName }),
       h('span', { class: `role-badge role-${data.me.role}`, text: roleInfo?.label ?? data.me.role }),
       data.isAdmin
         ? h(

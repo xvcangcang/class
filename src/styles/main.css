@@ -715,6 +715,258 @@ tr:hover td {
   }
 }
 
+
+/* 手机：优先保证图能看全 —— 顶栏压缩成一行、工具条换行、图占满剩余高度 */
+@media (max-width: 640px) {
+  :root {
+    /* 手机上能真正拿到视口高度，避免地址栏吃掉一块 */
+    --vh: 1vh;
+  }
+
+  html,
+  body {
+    height: 100%;
+    overflow-x: hidden;
+  }
+
+  #app {
+    min-height: 100dvh;
+  }
+
+  /* ---- 顶栏：一行放得下，不换行 ---- */
+  .topbar {
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 8px 10px;
+    align-items: center;
+  }
+
+  .brand {
+    font-size: 14px;
+    gap: 6px;
+    flex: none;
+  }
+
+  /* 手机上太长，只留圆点 */
+  .brand-text {
+    display: none;
+  }
+
+  .brand .dot {
+    width: 9px;
+    height: 9px;
+  }
+
+  /* ---- 标签：横向可滑，不再折行 ---- */
+  .tabs {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 2px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    min-width: 0;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab {
+    padding: 7px 11px;
+    font-size: 13px;
+    white-space: nowrap;
+    flex: none;
+  }
+
+  /* ---- 用户区：只留必要信息 ---- */
+  .userbox {
+    gap: 6px;
+    flex: none;
+    font-size: 12px;
+  }
+
+  /* 手机上任名字太长会挤爆顶栏 */
+  .userbox .user-name {
+    max-width: 64px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .userbox .role-badge {
+    display: none;
+  }
+
+  .userbox .btn {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+
+  /* ---- 页面留白收紧 ---- */
+  .page {
+    padding: 10px 10px 24px;
+    max-width: 100%;
+  }
+
+  .page-title {
+    font-size: 16px;
+  }
+
+  .footer-note {
+    padding: 12px 10px;
+    font-size: 11px;
+  }
+
+  /* ---- 关系图：占满剩余高度 ---- */
+  .graph-layout {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    min-height: 0;
+  }
+
+  .card.graph-card {
+    display: flex;
+    flex-direction: column;
+    /* 顶栏 + 页边距 + 底部提示 之外全给图 */
+    height: calc(100vh - 150px);
+    height: calc(100dvh - 150px);
+    min-height: 360px;
+  }
+
+  #chart {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+  }
+
+  /* ---- 工具条：紧凑换行 ---- */
+  .graph-toolbar {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  .graph-toolbar .btn,
+  .graph-toolbar .chip {
+    padding: 5px 9px;
+    font-size: 12px;
+  }
+
+  .graph-toolbar .input {
+    max-width: 100% !important;
+    flex: 1 1 120px;
+    padding: 7px 10px;
+  }
+
+  /* 缩放按钮别压在图上，缩小一点 */
+  .zoom-controls {
+    right: 8px;
+    bottom: 8px;
+    gap: 6px;
+  }
+
+  .zoom-btn {
+    width: 34px;
+    height: 34px;
+    font-size: 15px;
+  }
+
+  /* ---- 侧栏卡片紧凑 ---- */
+  .side {
+    gap: 10px;
+  }
+
+  .card {
+    padding: 12px;
+  }
+
+  .rel-item,
+  .ev-item {
+    padding: 9px 10px;
+  }
+
+  /* ---- 弹窗：手机全屏，避免内容被截 ---- */
+  .modal-mask {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal {
+    width: 100%;
+    max-height: 92dvh;
+    border-radius: 16px 16px 0 0;
+    padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .modal-actions {
+    position: sticky;
+    bottom: 0;
+    background: var(--panel);
+    padding-top: 10px;
+    margin-top: 16px;
+  }
+
+  .modal-actions .btn {
+    flex: 1;
+    padding: 11px 14px;
+  }
+
+  /* ---- 表格横向滚动，别撑破布局 ---- */
+  .table-wrap {
+    margin: 0 -12px;
+    padding: 0 12px;
+  }
+
+  th,
+  td {
+    padding: 9px 10px;
+  }
+
+  /* ---- 人物卡片：手机两列 ---- */
+  .grid-cards {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+  }
+
+  /* ---- 勾选列表：一行一个更好点 ---- */
+  .checkbox-grid {
+    grid-template-columns: 1fr;
+    max-height: 45dvh;
+  }
+
+  .checkbox-grid label {
+    padding: 6px 4px;
+    font-size: 14px;
+  }
+
+  /* ---- 无痕横幅别占太多 ---- */
+  .incognito-banner {
+    margin: 8px 10px 0;
+    padding: 8px 10px;
+    font-size: 12px;
+    flex-wrap: wrap;
+  }
+
+  /* ---- 日志行：手机上竖排 ---- */
+  .log-row {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  .log-time,
+  .log-actor {
+    min-width: auto;
+  }
+}
+
+/* 横屏手机 / 矮屏：图别把整屏吃掉 */
+@media (max-width: 900px) and (max-height: 520px) {
+  .card.graph-card {
+    height: calc(100dvh - 110px);
+    min-height: 240px;
+  }
+}
+
 /* ---------------- 操作日志 ---------------- */
 .log-intro {
   margin-bottom: 14px;
@@ -835,4 +1087,12 @@ tr:hover td {
   border-color: rgba(251, 191, 36, 0.6);
   color: var(--warn);
   background: transparent;
+}
+
+/* 手机上让搜索框撑满可用宽度（它的 max-width 是行内样式，必须 !important 才能覆盖） */
+@media (max-width: 640px) {
+  .graph-toolbar .input {
+    max-width: none !important;
+    flex: 1 1 110px;
+  }
 }
