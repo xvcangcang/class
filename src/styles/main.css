@@ -1095,3 +1095,46 @@ tr:hover td {
     flex: 1 1 110px;
   }
 }
+
+/* 关系图工具条：手机上把次要按钮收进「更多」，chips 横滑一行 */
+@media (max-width: 640px) {
+  .graph-toolbar .adv {
+    display: none;
+  }
+  .graph-toolbar.expanded .adv {
+    display: inline-flex;
+    align-items: center;
+  }
+  .graph-toolbar .count {
+    display: none;
+  }
+  .graph-toolbar .chips-row {
+    display: flex;
+    gap: 5px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    width: 100%;
+    padding-top: 2px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .graph-toolbar .chips-row::-webkit-scrollbar {
+    display: none;
+  }
+  .graph-toolbar .chips-row .chip {
+    flex: none;
+  }
+}
+
+@media (min-width: 641px) {
+  .graph-toolbar .more-toggle {
+    display: none;
+  }
+  .graph-toolbar .chips-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    width: 100%;
+    padding-top: 4px;
+  }
+}

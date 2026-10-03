@@ -677,7 +677,7 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
     h(
       'button',
       {
-        class: 'btn btn-sm',
+        class: 'btn btn-sm adv',
         onclick: () => {
           viewState.hiddenTypes.clear();
           viewState.keyword = '';
@@ -693,14 +693,25 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
     data.canEdit
       ? h('button', { class: 'btn btn-sm btn-primary', onclick: () => personForm(null, refresh) }, '＋ 人物')
       : null,
-    data.canEdit ? h('button', { class: 'btn btn-sm', onclick: () => linkForm(refresh) }, '＋ 关系') : null,
-    data.canEdit ? h('button', { class: 'btn btn-sm', onclick: () => groupManager(refresh) }, '🔲 群组') : null,
+    data.canEdit ? h('button', { class: 'btn btn-sm adv', onclick: () => linkForm(refresh) }, '＋ 关系') : null,
+    data.canEdit ? h('button', { class: 'btn btn-sm adv', onclick: () => groupManager(refresh) }, '🔲 群组') : null,
     data.canEdit
-      ? h('button', { class: 'btn btn-sm', onclick: () => typeManager(refresh) }, '⚙ 关系类型')
+      ? h('button', { class: 'btn btn-sm adv', onclick: () => typeManager(refresh) }, '⚙ 关系类型')
       : null,
+    // 手机上把上面这些次要按钮收进这里
+    h(
+      'button',
+      {
+        class: 'btn btn-sm more-toggle',
+        onclick: (event: Event) => {
+          (event.currentTarget as HTMLElement).closest('.graph-toolbar')?.classList.toggle('expanded');
+        },
+      },
+      '⋯ 更多',
+    ),
     h('div', { class: 'spacer' }),
-    h('div', { class: 'muted', text: `${data.people.length} 人 · ${data.links.length} 条关系` }),
-    h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;width:100%;padding-top:4px' }, ...chips),
+    h('div', { class: 'muted count', text: `${data.people.length} 人 · ${data.links.length} 条关系` }),
+    h('div', { class: 'chips-row' }, ...chips),
   );
 
   root.append(
@@ -1227,8 +1238,14 @@ export function renderGraph(root: HTMLElement, refresh: () => Promise<void>): ()
     fitChartHeight();
     chart.resize();
   };
+  // 旋转屏幕后画布尺寸变化很大，旧坐标会让节点留在画布外 —— 重新布局一次
+  const onOrientation = () => {
+    posCache.clear();
+    fitChartHeight();
+    chart.resize();
+  };
   window.addEventListener('resize', onResize);
-  window.addEventListener('orientationchange', onResize);
+  window.addEventListener('orientationchange', onOrientation);
   // 手机上地址栏收起/展开会改变可视高度，用 ResizeObserver 跟着调
   let resizeObserver: ResizeObserver | null = null;
   if (typeof ResizeObserver !== 'undefined') {
